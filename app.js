@@ -27,7 +27,7 @@
   // "Chụp gì?" — người mới chọn loại cảnh, app tự chọn khung + tỉ lệ rồi chỉ chỗ đặt chủ thể.
   // target(R, opt): điểm/đường cần đưa chủ thể tới, trong toạ độ khung ngắm (null = trục đó không quan trọng).
   const SCENES = [
-    { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5],
+    { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5], dir: true,
       place: 'Chạm hoặc kéo chấm tròn lên MẮT người được chụp',
       tip: 'Khoe biểu cảm → Cận mặt · áo, phụ kiện → Bán thân · dáng, cả bộ đồ → Toàn thân · nơi đã đến → Trong cảnh. Nền sau rối thì chụp càng cận càng tốt. Viền người ở bước 2 là dáng đứng — ngồi hay tạo dáng thì chỉ dùng để ước cỡ.',
       fit: 'tiến/lùi cho người vừa khít viền',
@@ -39,12 +39,12 @@
         ['full', 'Toàn thân', 0.25, { ratio: [2, 3], body: 0.1, tip: 'Tiến/lùi cho tới khi bàn chân còn cách mép dưới một chút — đừng cắt mất chân. Hạ máy xuống ngang hông cho chân dài, đừng chụp chúc từ trên xuống.' }],
         ['env', 'Trong cảnh', 1 / 3, { ratio: [2, 3], body: 0.035, tip: 'Người nhỏ thôi, cảnh chiếm phần lớn khung. Người nhìn hoặc đi về phía khoảng trống, không nhìn ra mép ảnh.' }],
       ],
-      target: (R, o, p) => nearest(p, o[0] === 'env'
+      target: (R, o, p) => nearest(p, facing(R, o[0] === 'env'
         ? [[1 / 3, 1 / 3], [2 / 3, 1 / 3], [1 / 3, 2 / 3], [2 / 3, 2 / 3]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v])
-        : [[R.x + R.w / 3, R.y + R.h * o[2]], [R.x + R.w * 2 / 3, R.y + R.h * o[2]]]) },
+        : [[R.x + R.w / 3, R.y + R.h * o[2]], [R.x + R.w * 2 / 3, R.y + R.h * o[2]]])) },
     { id: 'horizon', name: 'Chân trời', guide: 'thirds', ratio: [2, 3], line: true, level: true,
       place: 'Kéo vạch ngang cho trùng ĐƯỜNG CHÂN TRỜI (mép biển, dải núi, mép ruộng)',
-      tip: 'Đừng đặt chân trời ngay giữa ảnh — trừ khi chụp phản chiếu mặt nước. Phần nào đẹp hơn thì cho phần đó 2/3 khung.',
+      tip: 'Đừng đặt chân trời ngay giữa ảnh — trừ khi chụp phản chiếu mặt nước. Phần nào đẹp hơn thì cho phần đó 2/3 khung. Thêm tiền cảnh (tảng đá, khóm hoa, hàng rào) ở 1/3 dưới và hạ máy thấp — ảnh có chiều sâu hẳn.',
       opts: [['sky', 'Trời đẹp', 2 / 3], ['ground', 'Cảnh dưới đẹp', 1 / 3], ['mirror', 'Phản chiếu nước', 1 / 2]],
       target: (R, o) => ({ x: null, y: R.y + R.h * o[2] }) },
     { id: 'arch', name: 'Kiến trúc', guide: 'center', ratio: [4, 5], level: true,
@@ -53,14 +53,30 @@
       target: (R) => ({ x: R.x + R.w / 2, y: null }) },
     { id: 'object', name: 'Đồ vật', guide: 'phi', ratio: [1, 1],
       place: 'Chạm lên CHỦ THỂ (món ăn, bông hoa, sản phẩm)',
-      tip: 'Nền càng gọn càng tốt, để khoảng thở quanh vật. Món ăn đẹp nhất khi chụp thẳng từ trên xuống hoặc nghiêng 45°.',
-      fit: 'tiến/lùi cho vật nằm gọn trong ô', box: 0.45,
-      target: (R, o, p) => nearest(p, PHI_PTS(R)) },
-    { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3],
+      tip: 'Món ăn đẹp nhất khi chụp thẳng từ trên xuống hoặc nghiêng 45°.',
+      fit: 'tiến/lùi cho vật vừa ô',
+      // [id, tên, chỗ đặt, {khung vẽ theo chỗ đặt, box = cạnh ô so với cạnh ngắn của khung}]
+      opts: [
+        ['mid', 'Vừa', 'phi', { guide: 'phi', box: 0.45, tip: 'Vật chiếm khoảng nửa khung, chừa khoảng thở đều quanh vật. Nền càng gọn càng tốt.' }],
+        ['fill', 'Lấp đầy', 'center', { guide: 'center', box: 0.85, tip: 'Tiến sát cho vật gần kín khung, cắt bớt mép vật cũng được. Hợp chi tiết, hoa văn, món ăn cận.' }],
+        ['min', 'Tối giản', 'thirds', { guide: 'thirds', box: 0.2, tip: 'Vật nhỏ, nền trơn (trời, tường, mặt bàn) chiếm phần lớn khung — khoảng trống làm vật nổi bật.' }],
+      ],
+      target: (R, o, p) => o[2] === 'center' ? { x: R.x + R.w / 2, y: R.y + R.h / 2 }
+        : nearest(p, o[2] === 'phi' ? PHI_PTS(R) : [[1 / 3, 1 / 3], [2 / 3, 1 / 3], [1 / 3, 2 / 3], [2 / 3, 2 / 3]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v])) },
+    { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3], dir: true,
       place: 'Chạm lên ĐIỂM NHẤN nhỏ trong cảnh (một người, con thuyền, cái cây đơn độc)',
-      tip: 'Điểm nhấn nằm ở tâm xoắn, phần còn lại của cảnh dẫn mắt về đó. Chủ thể đang di chuyển thì chừa khoảng trống phía trước nó.',
+      tip: 'Điểm nhấn nằm ở tâm xoắn, phần còn lại của cảnh dẫn mắt về đó. Chủ thể đang đi về phía nào thì chọn hướng bên dưới để chừa khoảng trống phía trước. Có tiền cảnh (đá, cành cây) ở góc dưới thì ảnh sâu hơn.',
       target: (R) => { const e = spiralMap(R, st.variant)(SPIRAL.eye); return { x: e[0], y: e[1] }; } },
+    { id: 'lead', name: 'Đường dẫn', guide: 'thirds', ratio: [2, 3],
+      place: 'Chạm vào ĐIỂM CUỐI của đường — chỗ con đường, ray tàu, bờ sông mất hút',
+      tip: 'Đường đi vào từ mép dưới và kéo mắt người xem tới điểm cuối nằm ở 1/3 phía trên. Đường cong chữ S hấp dẫn hơn đường thẳng; có người hay vật ở cuối đường thì càng tốt.',
+      target: (R, o, p) => nearest(p, [[R.x + R.w / 3, R.y + R.h / 3], [R.x + R.w * 2 / 3, R.y + R.h / 3]]) },
   ];
+  // chủ thể nhìn/đi sang trái thì đặt nó lệch phải để chừa khoảng trống phía trước, và ngược lại
+  function facing(R, pts) {
+    const d = st.assist && st.assist.dir, mid = R.x + R.w / 2;
+    return d ? pts.filter((q) => (d === 'L' ? q[0] > mid : q[0] < mid)) : pts;
+  }
   const PHI_PTS = (R) => { const a = 1 - 1 / PHI, b = 1 / PHI; return [[a, a], [b, a], [a, b], [b, b]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v]); };
   function nearest(p, pts) {
     let best = pts[0], bd = Infinity;
@@ -438,10 +454,10 @@
   function startAssist(s) {
     if (s.level) enableLevel(true);
     st.guide = s.guide; st.variant = 0;
-    setRatio(s.opts && s.opts[0][3] ? s.opts[0][3].ratio : s.ratio);
+    setRatio((s.opts && s.opts[0][3] && s.opts[0][3].ratio) || s.ratio);
     st.landscape = isLand(); // khung theo chiều máy đang cầm, mọi loại cảnh
     const R = cropRect();
-    st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, pts: [], ok: false, lost: false };
+    st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, dir: null, pts: [], ok: false, lost: false };
     setSubject(R.x + R.w / 2, R.y + R.h / 2);
     stage.style.touchAction = 'none';
     renderGuideChips(); renderRatioChips(); renderSceneChips(); showTip(); renderAssistOpts(); updateAssist(); draw();
@@ -460,9 +476,19 @@
       b.onclick = () => {
         a.opt = o;
         if (o[3] && o[3].ratio) { setRatio(o[3].ratio); renderRatioChips(); }
+        // vòng đích phải nằm trên điểm của khung đang vẽ
+        if (o[3] && o[3].guide) { st.guide = o[3].guide; st.variant = 0; renderGuideChips(); }
         renderAssistOpts(); updateAssist(); draw();
       };
       box.appendChild(b);
+    });
+    // hướng nhìn/đi chỉ chọn ở bước 1 — thêm hàng ở bước 2 thì bảng cao lên, che vòng đích
+    const dbox = $('asDir'); dbox.innerHTML = '';
+    if (a.s.dir && a.phase === 'place') [['L', '← Nhìn/đi sang trái'], ['R', 'Nhìn/đi sang phải →']].forEach(([d, t]) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (a.dir === d ? ' on' : ''); b.textContent = t;
+      b.onclick = () => { a.dir = a.dir === d ? null : d; renderAssistOpts(); };
+      dbox.appendChild(b);
     });
   }
   function setSubject(x, y) {
@@ -482,9 +508,12 @@
     if (a.s.id === 'wide') {
       // chọn hướng xoắn có tâm gần chủ thể nhất — ít phải lia máy nhất
       const R = cropRect(), p = subjectPoint(a); let bd = Infinity;
-      for (let v = 0; v < 4; v++) { const e = spiralMap(R, v)(SPIRAL.eye), d = (e[0] - p.x) ** 2 + (e[1] - p.y) ** 2; if (d < bd) { bd = d; st.variant = v; } }
+      for (let v = 0; v < 4; v++) {
+        const e = spiralMap(R, v)(SPIRAL.eye), d = (e[0] - p.x) ** 2 + (e[1] - p.y) ** 2;
+        if (d < bd && facing(R, [e]).length) { bd = d; st.variant = v; }
+      }
     }
-    a.phase = 'guide'; updateAssist(); draw();
+    a.phase = 'guide'; renderAssistOpts(); updateAssist(); draw();
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   function updateAssist() {
@@ -542,7 +571,7 @@
   // nét đứt đôi (viền tối + nét trắng mờ), cắt theo khung để thấy rõ mép ảnh cắt người ở đâu
   function drawFit(ctx, R, a) {
     const t = a.t, o = a.opt && a.opt[3];
-    if (!t || t.x == null || t.y == null || !((o && o.body) || a.s.box)) return;
+    if (!t || t.x == null || t.y == null || !(o && (o.body || o.box))) return;
     ctx.save(); ctx.beginPath(); ctx.rect(R.x, R.y, R.w, R.h); ctx.clip(); ctx.beginPath();
     if (o && o.body) {
       const h = o.body * R.h, X = (u) => t.x + u * h, Y = (v) => t.y + v * h;
@@ -551,7 +580,7 @@
       BODY.forEach(([u, v]) => ctx.lineTo(X(u), Y(v)));
       BODY.slice().reverse().forEach(([u, v]) => ctx.lineTo(X(-u), Y(v)));
     } else {
-      const d = a.s.box * Math.min(R.w, R.h);
+      const d = o.box * Math.min(R.w, R.h);
       ctx.roundRect(t.x - d / 2, t.y - d / 2, d, d, d * 0.08);
     }
     ctx.lineJoin = 'round'; ctx.setLineDash([7, 6]);

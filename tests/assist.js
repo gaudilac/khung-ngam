@@ -62,9 +62,28 @@ function makeVideo(file) {
   assert(s2.step.startsWith('Bước 2') && /sang trái/.test(s2.msg) && /chúc máy xuống/.test(s2.msg), 'chỉ sai hướng lia máy: ' + s2.msg);
   // kiểu chụp: Toàn thân → khung 2:3, mắt cao hơn 1/3 (giữ trọn chân); Cận mặt → về 4:5
   const kieu = () => p.evaluate(() => { const R = KN.crop(), t = KN.st.assist.t; return { ratio: document.querySelector('#ratios .chip.on').textContent, ty: (t.y - R.y) / R.h }; });
-  await chip('#asOpts .chip', 'Toàn thân'); const k1 = await kieu();
+  // viền người: đếm điểm ảnh trắng trên lớp vẽ đè dọc mép dưới bàn chân phải của viền Toàn thân
+  const chan = (box) => p.evaluate((b) => {
+    const R = KN.crop(), dpr = overlay.width / overlay.clientWidth, h = 0.1 * R.h;
+    const t = b || { x: KN.st.assist.t.x, y: KN.st.assist.t.y };
+    const d = overlay.getContext('2d').getImageData(Math.round((t.x + 0.22 * h) * dpr), Math.round((t.y + 7 * h) * dpr) - 2, Math.round(0.36 * h * dpr), 5).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 3] > 150) n++;
+    return { n, t, msg: asMsg.textContent };
+  }, box);
+  await chip('#asOpts .chip', 'Toàn thân'); const k1 = await kieu(); const v1 = await chan();
   await p.screenshot({ path: OUT + '/a2b-toan-than.png' });
-  await chip('#asOpts .chip', 'Cận mặt'); const k2 = await kieu();
+  await chip('#asOpts .chip', 'Cận mặt'); const k2 = await kieu(); const v2 = await chan(v1.t);
+  console.log('vien nguoi', v1.n, v2.n, v1.msg);
+  assert(v1.n > 20 && v2.n < 5, 'viền Toàn thân phải có bàn chân, Cận mặt thì chân nằm ngoài khung');
+  assert(!/viền/.test(v1.msg), 'chưa đúng chỗ đã nhắc canh viền — bảng dài thêm, che vòng đích');
+  // đặt chấm đúng vòng đích → lúc đó mới nhắc tiến/lùi cho vừa viền
+  const khop = async () => {
+    const t = await p.evaluate(() => KN.st.assist.t);
+    await p.touchscreen.tap(stageBox.x + t.x, stageBox.y + t.y); await sleep(60);
+    return p.evaluate(() => asMsg.textContent);
+  };
+  const m1 = await khop(); console.log('khop', m1);
+  assert(/vừa khít viền/.test(m1), 'đúng chỗ rồi mà không nhắc canh viền: ' + m1);
   console.log('kieu chup', JSON.stringify(k1), JSON.stringify(k2));
   assert(k1.ratio === '2:3' && Math.abs(k1.ty - 0.25) < 0.02, 'Toàn thân phải khung 2:3, mắt ở 0,25 chiều cao');
   assert(k2.ratio === '4:5' && Math.abs(k2.ty - 1 / 3) < 0.02, 'Cận mặt phải về khung 4:5, mắt ở 1/3');
@@ -80,6 +99,7 @@ function makeVideo(file) {
   console.log('bam', JSON.stringify(p0), JSON.stringify(p1), 'dx', (p1.x - p0.x).toFixed(1), 'dy', (p1.y - p0.y).toFixed(1), 'kỳ vọng ~', (30 * 1.5 * sc).toFixed(0));
   await p.screenshot({ path: OUT + '/a3-bam.png' });
   assert(!p1.lost, 'mất dấu dù cảnh có chi tiết');
+  assert(/gọn trong ô/.test(await khop()), 'Đồ vật thiếu câu nhắc ô đặt vật');
   assert(p1.x - p0.x > 30 * 1.5 * sc * 0.4 && p1.x - p0.x < 30 * 1.5 * sc * 1.6, 'chấm không trôi theo cảnh');
   assert(Math.abs(p1.y - p0.y) < 15, 'chấm trôi dọc dù cảnh chỉ trôi ngang');
 

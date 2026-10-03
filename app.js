@@ -27,24 +27,24 @@
   // "Chụp gì?" — người mới chọn loại cảnh, app tự chọn khung + tỉ lệ rồi chỉ chỗ đặt chủ thể.
   // target(R, opt): điểm/đường cần đưa chủ thể tới, trong toạ độ khung ngắm (null = trục đó không quan trọng).
   const SCENES = [
-    { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5], land: false,
+    { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5],
       place: 'Chạm hoặc kéo chấm tròn lên MẮT người được chụp',
       tip: 'Mắt nằm trên đường 1/3 phía trên, chừa khoảng trống về phía người đang nhìn. Đừng để mép khung cắt ngang cổ, khuỷu tay hay đầu gối.',
       target: (R, o, p) => nearest(p, [[R.x + R.w / 3, R.y + R.h / 3], [R.x + R.w * 2 / 3, R.y + R.h / 3]]) },
-    { id: 'horizon', name: 'Chân trời', guide: 'thirds', ratio: [2, 3], land: 'screen', line: true, level: true,
+    { id: 'horizon', name: 'Chân trời', guide: 'thirds', ratio: [2, 3], line: true, level: true,
       place: 'Kéo vạch ngang cho trùng ĐƯỜNG CHÂN TRỜI (mép biển, dải núi, mép ruộng)',
       tip: 'Đừng đặt chân trời ngay giữa ảnh — trừ khi chụp phản chiếu mặt nước. Phần nào đẹp hơn thì cho phần đó 2/3 khung.',
       opts: [['sky', 'Trời đẹp', 2 / 3], ['ground', 'Cảnh dưới đẹp', 1 / 3], ['mirror', 'Phản chiếu nước', 1 / 2]],
       target: (R, o) => ({ x: null, y: R.y + R.h * o[2] }) },
-    { id: 'arch', name: 'Kiến trúc', guide: 'center', ratio: [4, 5], land: false, level: true,
+    { id: 'arch', name: 'Kiến trúc', guide: 'center', ratio: [4, 5], level: true,
       place: 'Chạm vào TRỤC GIỮA công trình (cửa chính, đỉnh mái, tháp)',
       tip: 'Đứng đúng trục giữa và giữ máy thẳng đứng — ngửa máy lên làm các cột chụm vào nhau. Thiếu chỗ thì lùi xa ra, đừng ngửa máy.',
       target: (R) => ({ x: R.x + R.w / 2, y: null }) },
-    { id: 'object', name: 'Đồ vật', guide: 'phi', ratio: [1, 1], land: false,
+    { id: 'object', name: 'Đồ vật', guide: 'phi', ratio: [1, 1],
       place: 'Chạm lên CHỦ THỂ (món ăn, bông hoa, sản phẩm)',
       tip: 'Nền càng gọn càng tốt, để khoảng thở quanh vật. Món ăn đẹp nhất khi chụp thẳng từ trên xuống hoặc nghiêng 45°.',
       target: (R, o, p) => nearest(p, PHI_PTS(R)) },
-    { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3], land: 'screen',
+    { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3],
       place: 'Chạm lên ĐIỂM NHẤN nhỏ trong cảnh (một người, con thuyền, cái cây đơn độc)',
       tip: 'Điểm nhấn nằm ở tâm xoắn, phần còn lại của cảnh dẫn mắt về đó. Chủ thể đang di chuyển thì chừa khoảng trống phía trước nó.',
       target: (R) => { const e = spiralMap(R, st.variant)(SPIRAL.eye); return { x: e[0], y: e[1] }; } },
@@ -61,7 +61,7 @@
     facing: 'environment', stream: null, track: null, timer: 0, busy: false,
     level: false, roll: null, pitch: null, full: false, assist: null,
   };
-  window.KN = { st }; // móc cho tests/e2e.js
+  window.KN = { st, crop: () => cropRect() }; // móc cho tests/
 
   const stage = $('stage'), video = $('video'), ov = $('overlay'), octx = ov.getContext('2d');
 
@@ -114,10 +114,25 @@
   $('tip').onclick = () => $('tip').classList.add('hide');
 
   // ---------- Hình học khung ----------
-  // Toàn màn hình: thanh trên/dưới nổi đè lên ảnh, khung có tỉ lệ thì né hai thanh đó
+  const isLand = () => innerWidth > innerHeight;
+  // điện thoại cầm ngang: CSS chuyển nút chụp sang cột phải, hàng chip nổi đè lên ảnh (khớp media query trong index.html)
+  const landMQ = matchMedia('(orientation: landscape) and (max-height: 560px)');
+  // Thanh nổi đè lên ảnh (toàn màn hình hoặc cầm ngang): khung có tỉ lệ thì né các thanh đó
   function insets() {
+    const cam = $('cam'), top = cam.querySelector('.topbar').offsetHeight;
+    if (landMQ.matches) { const pro = $('pro'); return [top, $('ratios').offsetHeight + 12 + (pro.hidden ? 0 : pro.offsetHeight + 6)]; }
     if (!st.full) return [0, 0];
-    return [$('cam').querySelector('.topbar').offsetHeight, $('cam').querySelector('.controls').offsetHeight];
+    return [top, cam.querySelector('.controls').offsetHeight];
+  }
+  // Xoay máy: khung đổi chiều theo; đang ở bước căn khung thì toạ độ cũ hết đúng → làm lại từ bước chỉ chủ thể
+  let lastLand = isLand();
+  function onResize() {
+    const land = isLand();
+    if (land !== lastLand) {
+      lastLand = land; st.landscape = land; renderRatioChips();
+      if (st.assist) startAssist(st.assist.s);
+    }
+    draw();
   }
   function cropRect() {
     const W = stage.clientWidth, H = stage.clientHeight;
@@ -239,7 +254,7 @@
     const lv = $('level');
     lv.style.left = (R.x + R.w * 0.27) + 'px'; lv.style.top = (R.y + R.h / 2) + 'px'; lv.style.width = (R.w * 0.46) + 'px';
   }
-  new ResizeObserver(draw).observe(stage);
+  new ResizeObserver(onResize).observe(stage);
 
   // ---------- Camera ----------
   async function startCamera() {
@@ -412,7 +427,7 @@
     if (s.level) enableLevel(true);
     st.guide = s.guide; st.variant = 0;
     st.ratio = RATIOS.find((r) => r && r[0] === s.ratio[0] && r[1] === s.ratio[1]);
-    st.landscape = s.land === 'screen' ? stage.clientWidth > stage.clientHeight : false;
+    st.landscape = isLand(); // khung theo chiều máy đang cầm, mọi loại cảnh
     const R = cropRect();
     st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, pts: [], ok: false, lost: false };
     setSubject(R.x + R.w / 2, R.y + R.h / 2);
@@ -683,7 +698,7 @@
   buildAdjUI();
 
   function openEditor(canvas) {
-    ed.full = canvas;
+    ed.full = canvas; ed.shot = (ed.shot || 0) + 1; ready = null; // ảnh mới: bỏ ảnh đã xuất sẵn của tấm trước
     const longSide = Math.min(1600, Math.round(Math.max(innerWidth, innerHeight) * Math.min(2, devicePixelRatio || 1)));
     ed.src = scaled(canvas, longSide);
     ed.out = new ImageData(ed.src.width, ed.src.height);
@@ -843,7 +858,8 @@
   // Safari chỉ mở bảng chia sẻ ngay sau cú chạm; xuất ảnh lớn mất 1–2 giây có thể làm mất "cú chạm" đó.
   // Bị chặn thì giữ ảnh đã xuất và mời bấm lại — lần hai mở ngay, không phải chờ.
   let ready = null;
-  const shareSig = () => JSON.stringify([ed.preset, ed.amount, ed.adj, $('withPal').checked, ed.full && ed.full.width]);
+  // phải có ed.shot: thiếu nó thì tấm mới cùng gam màu + cùng cỡ bị coi là tấm cũ và lưu nhầm ảnh cũ
+  const shareSig = () => JSON.stringify([ed.shot, ed.preset, ed.amount, ed.adj, $('withPal').checked]);
   const SHARE_TXT = 'Lưu vào Ảnh';
   $('share').onclick = async () => {
     const btn = $('share');
@@ -865,7 +881,7 @@
   };
 
   // ---------- Khởi động ----------
-  st.landscape = stage.clientWidth > stage.clientHeight * 1.15;
+  st.landscape = isLand();
   renderSceneChips(); renderGuideChips(); renderRatioChips(); showTip(); draw();
   startCamera();
   document.addEventListener('visibilitychange', () => {

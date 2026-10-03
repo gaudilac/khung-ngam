@@ -1,10 +1,10 @@
 # Dự án: Khung Ngắm (Photo_Art)
 
-Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → vẽ khung bố cục (một phần ba, lưới vàng, xoắn ốc vàng, đường chéo, tam giác vàng, đối xứng) + đo sáng + thước cân bằng → chụp → gợi ý gam màu kiểu film, trích bảng màu → lưu ảnh. HTML/CSS/JS thuần, **không framework, không build step, không thư viện ngoài** (chỉ font Be Vietnam Pro từ Google Fonts). Không có backend — mọi xử lý ảnh chạy trong trình duyệt, ảnh không rời máy người dùng.
+Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → (tuỳ chọn) chọn "Chụp gì?" để app tự chọn khung và chỉ chỗ đặt chủ thể → vẽ khung bố cục (một phần ba, lưới vàng, xoắn ốc vàng, đường chéo, tam giác vàng, đối xứng) + đo sáng + thước cân bằng → chụp → gợi ý gam màu kiểu film, trích bảng màu → lưu ảnh. HTML/CSS/JS thuần, **không framework, không build step, không thư viện ngoài** (chỉ font Be Vietnam Pro từ Google Fonts). Không có backend — mọi xử lý ảnh chạy trong trình duyệt, ảnh không rời máy người dùng.
 
 ## Thông tin dự án
 - Link dùng: **https://gaudilac.github.io/khung-ngam/** (GitHub Pages, repo `gaudilac/khung-ngam`, nhánh `main`, thư mục gốc).
-- Deploy = `git push origin main` → Pages tự dựng lại sau ~1 phút. Kiểm: `curl -sL https://gaudilac.github.io/khung-ngam/app.js | grep -c "<chuỗi vừa sửa>"` phải ra ≥ 1. Báo cáo cho user nêu rõ link đã nhận bản mới chưa.
+- Deploy: máy **không chạy được git** (license Xcode chưa chấp nhận) → đẩy từng file bằng `gh api -X PUT repos/gaudilac/khung-ngam/contents/<file>` (file đã có phải kèm `-f sha=<sha hiện tại>`, commit message kết bằng dòng `Co-Authored-By`). Pages tự dựng lại sau ~1 phút; chờ `gh api repos/gaudilac/khung-ngam/pages/builds/latest -q .status` = `built`. Kiểm: `curl -sL https://gaudilac.github.io/khung-ngam/app.js | grep -c "<chuỗi vừa sửa>"` phải ra ≥ 1. Báo cáo cho user nêu rõ link đã nhận bản mới chưa.
 - ⚠️ Repo **public** — ai cũng đọc được code. Không đưa secret, key API, ảnh cá nhân của user vào repo.
 - Camera chỉ mở được qua **https hoặc localhost**. Mở qua IP mạng LAN (`http://192.168…`) thì không có camera — muốn thử trên điện thoại phải dùng link GitHub.
 - Chạy local: `python3 -m http.server 8765` trong `Photo_Art/` → http://localhost:8765.
@@ -31,8 +31,10 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → vẽ khung bố 
 ### 4. Chạy thật mới tin
 **Định nghĩa tiêu chí thành công trước. Lặp đến khi xác minh được.**
 - `node tests/grade.test.js` — kiểm bộ màu không cần trình duyệt (preset Gốc giữ nguyên pixel, preset khác phải đổi, đen trắng phải ra xám, gợi ý có lý do, nhận diện màu bổ túc).
+- `NODE_PATH="../web_task/node_modules" node tests/assist.js` (cần server 8765) — camera giả là **video tự dựng hoa văn trôi sang phải** với tốc độ biết trước: kiểm chấm bám chủ thể trôi đúng hướng/đúng khoảng cách, câu chỉ hướng lia máy đúng chiều, lựa chọn chân trời, nút ✕, toàn màn hình phủ kín, nút Lưu vào Ảnh hiện ngay và luồng Safari chặn → bấm lại.
 - `NODE_PATH="../web_task/node_modules" node tests/e2e.js` (cần server 8765 đang chạy) — puppeteer + camera giả của Chrome: mở camera, đổi khung, thước cân bằng giả lập cả dấu Android lẫn iOS, chụp, chỉnh màu, tải ảnh, tải ảnh có sẵn, giữ-để-so. Ảnh chụp màn hình ra `$OUT` (mặc định `$TMPDIR/khung-ngam-test`) — **xem ảnh**, đừng chỉ đọc chữ PASS.
 - Thêm test mới thì phá code cho nó FAIL một lần để chắc test kiểm được thật.
+- Chạy thẳng trên link thật: thêm `URL=https://gaudilac.github.io/khung-ngam/` trước lệnh test.
 - Đổi giao diện thì chụp ở cả khổ điện thoại (390×844) lẫn máy tính (1366×820).
 - Thứ chưa test được bằng puppeteer (cảm biến nghiêng thật, iOS, camera thật, Lưu vào Ảnh) → ghi vào checklist test tay cho user, nói rõ là chưa kiểm.
 
@@ -43,12 +45,19 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → vẽ khung bố 
 - Tô màu vùng tối/vùng sáng (`splitS`/`splitH`) phải **giữ nguyên độ sáng** (`toneVec` trừ luminance) — chỉ đổi sắc, không làm ảnh sáng/tối đi.
 - Giao diện **xám trung tính có chủ đích**: nền có màu làm mắt đánh giá sai màu ảnh. Màu nhấn duy nhất là `--accent`.
 - Nét khung vẽ đôi (viền tối mờ + nét sáng) để nhìn được trên cả trời trắng lẫn bóng tối.
+- **Chỉ hướng theo chiều MÁY, không theo chiều chủ thể**: chủ thể cần sang phải trong khung → "lia máy sang trái"; cần xuống → "ngửa máy lên". Camera trước (lật gương) chỉ nói "theo mũi tên".
+- Khung hướng dẫn không được che mục tiêu: bước 2 chỉ còn câu chỉ hướng, mẹo chuyên môn chỉ ở bước 1.
 
 ## Cấu trúc file
 - `index.html` — toàn bộ CSS (trong `<style>`) + markup của hai màn: `#cam` (chụp) và `#edit` (chỉnh màu). Màn đang hiện có class `.on`.
 - `app.js` — một IIFE, theo thứ tự: danh sách khung `GUIDES` + tỉ lệ `RATIOS` → vẽ khung (`cropRect`, `drawGuide`, `SPIRAL`) → camera (`startCamera`, `setupPro` zoom/bù sáng) → đo sáng (`meter`, `lumaStats`, `drawHist`) → thước cân bằng (`onMotion`, `levelLoop`) → chụp (`sourceRect`, `capture`) → màn chỉnh màu (`openEditor`, `buildPresets`, `render`, bảng màu) → xuất ảnh (`exportBlob`, dải bảng màu tuỳ chọn).
 - `grade.js` — `window.Grade`, **không đụng DOM** (chạy được trong Node): `PRESETS`, `analyze` (thống kê ảnh), `suggest` (chấm điểm preset), `resolve` (gộp preset + chỉnh tay), `apply` (xử lý pixel), `palette` (k-means hạt giống cố định), `harmony` (đọc quan hệ màu).
-- `tests/` — `grade.test.js`, `e2e.js`.
+- `tests/` — `grade.test.js`, `e2e.js`, `assist.js`.
+- `window.KN = { st }` — móc trạng thái cho test đọc, đừng xoá.
+
+### "Chụp gì?" (SCENES trong app.js)
+Mỗi cảnh: `guide` + `ratio` + `land` (`'screen'` = theo chiều màn hình) + `place` (câu bước 1) + `tip` + `target(R, opt, p)` trả `{x, y}` (`null` = trục đó không xét; chân trời là `line: true`, chỉ xét y). `level: true` thì tự bật thước. Hai bước: **place** (chạm/kéo chỉ chủ thể) → thả tay `lockOn()` chụp mẫu → **guide** (bám + chỉ hướng, rung khi khớp).
+Bám chủ thể (`grab`/`patchAt`/`trackPoint`): khung hình thu về 160px xám, so khớp mảng 17×17 **đã trừ độ sáng trung bình** (chịu được máy tự đổi phơi sáng), tìm quanh ±12px (±20 khi mất dấu), sai số trung bình > 22 = mất dấu, < 10 thì cập nhật mẫu 15%. Mẫu quá trơn (`std < 7`, vd trời xanh) thì báo người dùng chọn chỗ có chi tiết. Chân trời bám 2 điểm trên vạch.
 
 ### Thêm khung bố cục mới
 Thêm một mục vào `GUIDES` (`id`, `name`, `variants`, `tip`) + một nhánh trong `drawGuide`. `tip` viết như lời thợ ảnh: đặt chủ thể ở đâu, hợp cảnh gì. Có biến thể xoay/lật thì `variants > 1` — chạm lại chip để đổi.
@@ -57,6 +66,11 @@ Thêm một mục vào `GUIDES` (`id`, `name`, `variants`, `tip`) + một nhánh
 Thêm vào `PRESETS` (`id`, `name`, `note`, `p`) + một dòng chấm điểm trong `suggest` kèm `why`. Tham số `p` có sẵn: `ev, temp, tint, contrast, fade, lift, gain, gamma, hiRoll, sat, vib, splitS, splitH, to, greenDesat, bw, vig, grain`. Cập nhật số preset trong `tests/e2e.js` (đang kiểm 14).
 
 ## Bẫy đã biết
+- **Nút lưu từng nằm dưới đáy vùng cuộn** nên user không thấy → giờ ở `.savebar` cố định ngoài `.panel`. Đừng đưa nút hành động chính vào vùng cuộn.
+- **iPad đời mới tự xưng "Macintosh" trong userAgent** → nhận điện thoại/máy tính bảng bằng `navigator.maxTouchPoints > 0`, không dò userAgent.
+- **Safari chỉ mở bảng chia sẻ ngay sau cú chạm**; xuất ảnh lớn mất 1–2 giây có thể làm mất cú chạm → `NotAllowedError`. Nút Lưu giữ ảnh đã xuất (`ready`, khoá theo `shareSig`) và đổi chữ "chạm lần nữa" — lần hai mở ngay. Chưa kiểm trên iPhone thật xem lần một có bị chặn không.
+- **iPhone không có Fullscreen API cho trang** → nút toàn màn hình chỉ đổi bố cục (thanh nổi đè ảnh) + nhắc "Thêm vào MH chính". Android/máy tính thì gọi `requestFullscreen` thật.
+- Ảnh camera giả chỉ có vài mảng màu phẳng → k-means có thể ra < 5 màu; test chỉ đòi ≥ 3.
 - **Hàng chip `white-space: nowrap` làm cột grid phình rộng hơn màn hình** → khung ngắm lệch sang phải. `.screen.on` phải có `grid-template-columns: minmax(0, 1fr)`.
 - **`justify-content: center` trên hàng cuộn ngang cắt mất phần tử đầu** khi tràn (không cuộn tới được). Dùng `margin-left:auto` cho con đầu + `margin-right:auto` cho con cuối (`.ratios`).
 - **Đo kích thước khi màn còn `display:none` ra toàn 0.** `buildPresets` chạy trước khi `#edit` hiện → cuộn tới preset gợi ý phải đợi `requestAnimationFrame`.

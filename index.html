@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Khung Ngắm</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%23121212%22/%3E%3Cpath d=%22M11 4v24M21 4v24M4 11h24M4 21h24%22 stroke=%22%23e9b44c%22 stroke-width=%221.6%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap">
+<style>
+  /* Giao diện xám trung tính có chủ đích: nền có màu làm lệch cảm nhận màu ảnh */
+  :root {
+    --bg: #121212; --panel: #1b1b1b; --line: #2c2c2c; --text: #ececec; --muted: #9a9a9a;
+    --accent: #e9b44c; --ok: #6fd08c; --warn: #ff8a5c;
+    --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font: 14px/1.4 "Be Vietnam Pro", system-ui, -apple-system, sans-serif; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+  .screen { position: fixed; inset: 0; display: none; height: 100dvh; }
+  .screen.on { display: grid; grid-template-columns: minmax(0, 1fr); }
+
+  /* ---------- Màn chụp ---------- */
+  #cam { grid-template-rows: auto 1fr auto; }
+  .topbar { padding: calc(var(--safe-t) + 10px) 12px 8px; background: var(--bg); z-index: 2; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; padding: 7px 12px; border-radius: 999px; background: var(--panel); color: var(--muted);
+    border: 1px solid var(--line); white-space: nowrap; font-size: 13px; }
+  .chip.on { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .chip .cyc { opacity: .7; margin-left: 4px; }
+
+  .stage { position: relative; overflow: hidden; background: #000; touch-action: manipulation; }
+  #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #video.mirror { transform: scaleX(-1); }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tip { position: absolute; left: 12px; right: 12px; top: 10px; padding: 8px 12px; border-radius: 10px;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    font-size: 12.5px; color: #ddd; transition: opacity .3s; }
+  .tip.hide { opacity: 0; pointer-events: none; }
+  .meter { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 8px;
+    pointer-events: none; }
+  .meter canvas { width: 96px; height: 34px; background: rgba(0,0,0,.45); border-radius: 6px; }
+  .meter span { font-size: 11.5px; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 6px; }
+  .meter span.bad { color: var(--warn); }
+  #level { position: absolute; left: 50%; top: 50%; width: 46%; height: 0; pointer-events: none; display: none; }
+  #level .ref, #level .bar { position: absolute; left: 0; right: 0; top: 0; height: 0; }
+  #level .ref::before, #level .ref::after { content: ""; position: absolute; top: -1px; width: 18%; height: 2px; background: rgba(255,255,255,.6); }
+  #level .ref::before { left: -24%; } #level .ref::after { right: -24%; }
+  #level .bar { border-top: 2px solid rgba(255,255,255,.9); transform-origin: 50% 0; }
+  #level.flat .bar, #level.flat .ref::before, #level.flat .ref::after { border-color: var(--ok); background: var(--ok); }
+  #level .deg { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); font-size: 12px;
+    background: rgba(0,0,0,.5); padding: 1px 7px; border-radius: 6px; }
+  #level.flat .deg { color: var(--ok); }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  #countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 96px; font-weight: 600;
+    color: #fff; text-shadow: 0 2px 20px rgba(0,0,0,.6); pointer-events: none; }
+  .nocam { position: absolute; inset: 0; display: none; place-content: center; text-align: center; padding: 24px; gap: 14px; }
+  .nocam.on { display: grid; }
+  .nocam p { margin: 0; color: var(--muted); max-width: 420px; }
+
+  .controls { background: var(--bg); padding: 10px 12px calc(var(--safe-b) + 14px); z-index: 2; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .ratios { margin-bottom: 12px; }
+  /* căn giữa nhưng vẫn cuộn được khi tràn (justify-content:center cắt mất chip đầu) */
+  .ratios > :first-child { margin-left: auto; } .ratios > :last-child { margin-right: auto; }
+  .pro { justify-content: center; gap: 14px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+  .pro label { display: flex; align-items: center; gap: 6px; }
+  .pro input { width: 110px; }
+  .shoot { justify-content: space-between; max-width: 420px; margin: 0 auto; }
+  .round { width: 48px; height: 48px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line);
+    display: grid; place-items: center; }
+  .round svg { width: 22px; height: 22px; }
+  .small { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+  .tool { display: flex; flex-direction: column; align-items: center; }
+  #shutter { width: 74px; height: 74px; border-radius: 50%; border: 4px solid #fff; background: transparent; padding: 5px; }
+  #shutter::after { content: ""; display: block; width: 100%; height: 100%; border-radius: 50%; background: #fff; transition: transform .1s; }
+  #shutter:active::after { transform: scale(.88); }
+  #shutter:disabled { opacity: .35; }
+
+  /* ---------- Màn chỉnh màu ---------- */
+  #edit { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .ehead { display: flex; align-items: center; justify-content: space-between; padding: calc(var(--safe-t) + 8px) 10px 8px; }
+  .ehead h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  .txtbtn { padding: 8px 10px; border-radius: 8px; color: var(--muted); }
+  .txtbtn:hover { color: var(--text); }
+  .view { position: relative; display: grid; place-items: center; padding: 0 10px; min-height: 0; }
+  #pv { max-width: 100%; max-height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 0 0 1px #222; }
+  .badge { position: absolute; left: 20px; top: 10px; font-size: 11.5px; background: rgba(0,0,0,.6); padding: 3px 8px;
+    border-radius: 6px; pointer-events: none; display: none; }
+  .badge.on { display: block; }
+  #ehist { position: absolute; right: 20px; top: 10px; width: 96px; height: 34px; background: rgba(0,0,0,.45);
+    border-radius: 6px; pointer-events: none; }
+
+  .panel { background: var(--bg); padding: 10px 0 calc(var(--safe-b) + 10px); max-height: 52dvh; overflow-y: auto; }
+  .sect { padding: 0 14px; margin-bottom: 12px; }
+  .sect h2 { font-size: 11.5px; font-weight: 500; color: var(--muted); margin: 0 0 7px; letter-spacing: .04em; text-transform: uppercase;
+    display: flex; justify-content: space-between; gap: 8px; }
+  .sect h2 b { font-weight: 500; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .pal { display: flex; height: 40px; border-radius: 8px; overflow: hidden; }
+  .pal button { position: relative; min-width: 0; }
+  .pal button span { position: absolute; left: 5px; bottom: 3px; font-size: 10px; opacity: 0; transition: opacity .15s; }
+  .pal:hover button span, .pal.show button span { opacity: 1; }
+  .harm { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .harm b { color: var(--text); font-weight: 500; }
+  .presets { display: flex; gap: 8px; overflow-x: auto; padding: 0 14px 4px; scrollbar-width: none; }
+  .presets::-webkit-scrollbar { display: none; }
+  .pr { flex: none; width: 74px; text-align: center; font-size: 11.5px; color: var(--muted); position: relative; }
+  .pr canvas { width: 74px; height: 74px; border-radius: 8px; display: block; margin-bottom: 4px; outline: 2px solid transparent; outline-offset: 1px; }
+  .pr.on { color: var(--text); font-weight: 600; }
+  .pr.on canvas { outline-color: var(--accent); }
+  .pr .star { position: absolute; top: 4px; right: 4px; background: var(--accent); color: #111; font-size: 9.5px; font-weight: 600;
+    padding: 1px 5px; border-radius: 5px; }
+  .note { padding: 6px 14px 0; font-size: 12.5px; color: var(--muted); min-height: 22px; }
+  .note b { color: var(--accent); font-weight: 500; }
+  .sl { display: grid; grid-template-columns: 112px 1fr 38px; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0; }
+  .sl output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; list-style: none; }
+  details summary::before { content: "▸ "; } details[open] summary::before { content: "▾ "; }
+  .save { display: flex; gap: 8px; padding: 4px 14px 0; align-items: center; flex-wrap: wrap; }
+  .primary { flex: 1; min-width: 140px; padding: 12px; border-radius: 10px; background: var(--accent); color: #111; font-weight: 600; }
+  .secondary { flex: 1; min-width: 140px; padding: 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+  .primary:disabled, .secondary:disabled { opacity: .5; }
+  .check { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); width: 100%; }
+  .toast { position: fixed; left: 50%; bottom: calc(var(--safe-b) + 24px); transform: translateX(-50%); background: #2a2a2a;
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+  .toast.on { opacity: 1; }
+
+  @media (min-width: 900px) {
+    #edit { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto 1fr; }
+    .ehead { grid-column: 1 / -1; }
+    .panel { max-height: none; border-left: 1px solid var(--line); padding-top: 14px; }
+    .view { padding: 0 20px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<section id="cam" class="screen on" aria-label="Chụp ảnh">
+  <div class="topbar"><div class="chips" id="guides"></div></div>
+  <div class="stage" id="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+    <div id="level"><div class="ref"></div><div class="bar"></div><span class="deg"></span></div>
+    <div class="tip" id="tip"></div>
+    <div class="meter"><span id="meterTxt"></span><canvas id="hist" width="192" height="68"></canvas></div>
+    <div id="flash"></div>
+    <div id="countdown"></div>
+    <div class="nocam" id="nocam">
+      <p id="nocamMsg">Đang mở camera…</p>
+      <div><button class="secondary" id="nocamPick" style="flex:none;padding:10px 18px">Chọn ảnh có sẵn</button></div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="chips row ratios" id="ratios"></div>
+    <div class="row pro" id="pro" hidden></div>
+    <div class="row shoot">
+      <div class="tool"><button class="round" id="pick" aria-label="Chọn ảnh có sẵn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></button>
+        <div class="small">Thư viện</div></div>
+      <div class="tool"><button class="round" id="timer" aria-label="Hẹn giờ">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
+        <div class="small" id="timerTxt">Tắt</div></div>
+      <button id="shutter" aria-label="Chụp" disabled></button>
+      <div class="tool"><button class="round" id="levelBtn" aria-label="Thước cân bằng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12h18"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <div class="small" id="levelTxt">Cân bằng</div></div>
+      <div class="tool"><button class="round" id="flip" aria-label="Đổi camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h12l-3-3M20 16H8l3 3"/></svg></button>
+        <div class="small">Đổi cam</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="edit" class="screen" aria-label="Chỉnh màu">
+  <div class="ehead">
+    <button class="txtbtn" id="back">← Chụp lại</button>
+    <h1>Chọn gam màu</h1>
+    <button class="txtbtn" id="reset">Đặt lại</button>
+  </div>
+  <div class="view">
+    <canvas id="pv"></canvas>
+    <div class="badge" id="cmpBadge">Ảnh gốc</div>
+    <canvas id="ehist" width="192" height="68"></canvas>
+  </div>
+  <div class="panel">
+    <div class="sect">
+      <h2><span>Bảng màu của ảnh</span><b id="tempTxt"></b></h2>
+      <div class="pal" id="pal"></div>
+      <div class="harm" id="harm"></div>
+    </div>
+    <div class="sect" style="padding:0;margin-bottom:4px">
+      <h2 style="padding:0 14px"><span>Gam màu</span><span style="text-transform:none;letter-spacing:0">giữ ảnh để so với gốc</span></h2>
+      <div class="presets" id="presets"></div>
+      <div class="note" id="note"></div>
+    </div>
+    <div class="sect">
+      <div class="sl"><span>Độ đậm</span><input type="range" id="amount" min="0" max="100" value="100"><output id="amountOut">100</output></div>
+      <details id="adv">
+        <summary>Chỉnh tay</summary>
+        <div id="adjs"></div>
+      </details>
+    </div>
+    <div class="save">
+      <label class="check"><input type="checkbox" id="withPal"> Kèm dải bảng màu dưới ảnh</label>
+      <button class="primary" id="dl">Tải ảnh về</button>
+      <button class="secondary" id="share" hidden>Lưu vào Ảnh / Chia sẻ</button>
+    </div>
+  </div>
+</section>
+
+<input type="file" id="file" accept="image/*" hidden>
+<div class="toast" id="toast"></div>
+
+<script src="grade.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

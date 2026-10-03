@@ -57,7 +57,7 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → (tuỳ chọn) c
 - `window.KN = { st, crop }` — móc trạng thái cho test đọc, đừng xoá.
 
 ### "Chụp gì?" (SCENES trong app.js)
-Mỗi cảnh: `guide` + `ratio` + `land` (`'screen'` = theo chiều màn hình) + `place` (câu bước 1) + `tip` + `target(R, opt, p)` trả `{x, y}` (`null` = trục đó không xét; chân trời là `line: true`, chỉ xét y). `level: true` thì tự bật thước. Hai bước: **place** (chạm/kéo chỉ chủ thể) → thả tay `lockOn()` chụp mẫu → **guide** (bám + chỉ hướng, rung khi khớp).
+Mỗi cảnh: `guide` + `ratio` + `land` (`'screen'` = theo chiều màn hình) + `place` (câu bước 1) + `tip` + `target(R, opt, p)` trả `{x, y}` (`null` = trục đó không xét; chân trời là `line: true`, chỉ xét y). `level: true` thì tự bật thước. `opts` = các lựa chọn con `[id, tên, giá trị, {ratio, tip}?]` (Chân trời: độ cao vạch; Người: Cận mặt/Bán thân/Toàn thân/Trong cảnh, giá trị = độ cao của mắt) — chọn lựa chọn có `ratio` thì đổi khung theo, `tip` riêng nối dưới `tip` của cảnh. Toàn thân để mắt ở 0,25 chứ không cao hơn: bảng hướng dẫn bước 2 che mất vòng đích. Hai bước: **place** (chạm/kéo chỉ chủ thể) → thả tay `lockOn()` chụp mẫu → **guide** (bám + chỉ hướng, rung khi khớp).
 Bám chủ thể (`grab`/`patchAt`/`trackPoint`): khung hình thu về 160px xám, so khớp mảng 17×17 **đã trừ độ sáng trung bình** (chịu được máy tự đổi phơi sáng), tìm quanh ±12px (±20 khi mất dấu), sai số trung bình > 22 = mất dấu, < 10 thì cập nhật mẫu 15%. Mẫu quá trơn (`std < 7`, vd trời xanh) thì báo người dùng chọn chỗ có chi tiết. Chân trời bám 2 điểm trên vạch.
 
 ### Thêm khung bố cục mới

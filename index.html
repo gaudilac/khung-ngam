@@ -114,8 +114,8 @@
   .txtbtn { padding: 8px 10px; border-radius: 8px; color: var(--muted); }
   .txtbtn:hover { color: var(--text); }
   .view { position: relative; display: grid; place-items: center; padding: 0 10px; min-height: 0; }
-  #pv { max-width: 100%; max-height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none;
-    box-shadow: 0 0 0 1px #222; }
+  /* giãn vừa khung cả khi ảnh nhỏ hơn chỗ trống (camera độ phân giải thấp) */
+  #pv { width: 100%; height: 100%; object-fit: contain; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
   .badge { position: absolute; left: 20px; top: 10px; font-size: 11.5px; background: rgba(0,0,0,.6); padding: 3px 8px;
     border-radius: 6px; pointer-events: none; display: none; }
   .badge.on { display: block; }
@@ -159,13 +159,40 @@
     padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
   .toast.on { opacity: 1; }
 
-  @media (min-width: 900px) {
+  @media (min-width: 900px), (orientation: landscape) and (max-height: 560px) {
     #edit { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto minmax(0, 1fr) auto;
       grid-template-areas: "h h" "v p" "v s"; }
     .ehead { grid-area: h; } .view { grid-area: v; } .panel { grid-area: p; } .savebar { grid-area: s; }
     .panel { max-height: none; border-left: 1px solid var(--line); padding-top: 14px; }
     .savebar { border-left: 1px solid var(--line); }
     .view { padding: 0 20px 20px; }
+  }
+  /* Điện thoại cầm ngang: chỉ còn ~390px chiều cao, xếp chồng như màn dọc thì khung ngắm còn chưa tới 100px.
+     Nút chụp thành cột bên phải (như app camera), hai hàng chip nổi đè lên ảnh. JS đọc cùng điều kiện ở landMQ. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #cam.screen { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); }
+    #cam.screen > .stage { grid-area: 1 / 1; }
+    #cam.screen > .topbar { grid-area: 1 / 1; align-self: start; display: flex; gap: 10px; align-items: center;
+      padding: calc(var(--safe-t) + 6px) 10px 14px calc(env(safe-area-inset-left, 0px) + 10px);
+      background: linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,0)); }
+    #cam.screen .topbar .scenes { margin: 0; flex: 1 1 55%; min-width: 0; }
+    #cam.screen .topbar #guides { flex: 1 1 45%; min-width: 0; }
+    #cam.screen > .controls { display: contents; }
+    #cam.screen #ratios { grid-area: 1 / 1; align-self: end; margin: 0; z-index: 2;
+      padding: 0 10px 12px calc(env(safe-area-inset-left, 0px) + 10px); }
+    #cam.screen #pro { grid-area: 1 / 1; align-self: end; margin-bottom: 58px; z-index: 2; }
+    #cam.screen .shoot { grid-area: 1 / 2; flex-direction: column; justify-content: center; gap: 12px; max-width: none; margin: 0;
+      padding: 8px calc(env(safe-area-inset-right, 0px) + 12px) 8px 12px; background: var(--bg); z-index: 2; }
+    #cam.screen .shoot .small { display: none; }
+    #cam.screen .round { width: 44px; height: 44px; }
+    #cam.screen #shutter { width: 66px; height: 66px; }
+    #cam.screen .chip:not(.on) { background: rgba(0,0,0,.45); border-color: rgba(255,255,255,.16); color: #eee; }
+    #cam.screen .lbl { color: #ddd; text-shadow: 0 1px 3px #000; }
+    /* khung hướng dẫn/mẹo thành cột hẹp bên trái, không trải ngang che khung ngắm */
+    #cam.screen .assist, #cam.screen .tip { right: auto; width: min(360px, 38%); left: calc(env(safe-area-inset-left, 0px) + 10px); }
+    #edit { grid-template-columns: minmax(0, 1fr) 340px; }
+    .ehead { padding-top: calc(var(--safe-t) + 4px); padding-bottom: 4px; }
+    .view { padding: 0 10px 10px calc(env(safe-area-inset-left, 0px) + 10px); }
   }
 </style>
 </head>

@@ -99,7 +99,7 @@ function makeVideo(file) {
   console.log('bam', JSON.stringify(p0), JSON.stringify(p1), 'dx', (p1.x - p0.x).toFixed(1), 'dy', (p1.y - p0.y).toFixed(1), 'kỳ vọng ~', (30 * 1.5 * sc).toFixed(0));
   await p.screenshot({ path: OUT + '/a3-bam.png' });
   assert(!p1.lost, 'mất dấu dù cảnh có chi tiết');
-  assert(/gọn trong ô/.test(await khop()), 'Đồ vật thiếu câu nhắc ô đặt vật');
+  assert(/vừa ô/.test(await khop()), 'Đồ vật thiếu câu nhắc ô đặt vật');
   assert(p1.x - p0.x > 30 * 1.5 * sc * 0.4 && p1.x - p0.x < 30 * 1.5 * sc * 1.6, 'chấm không trôi theo cảnh');
   assert(Math.abs(p1.y - p0.y) < 15, 'chấm trôi dọc dù cảnh chỉ trôi ngang');
 
@@ -113,6 +113,32 @@ function makeVideo(file) {
   await p.screenshot({ path: OUT + '/a4-chan-troi.png' });
   console.log('chan troi target y', h1.toFixed(0), '→', h2.toFixed(0));
   assert(h2 < h1, 'đổi "Cảnh dưới đẹp hơn" phải dời chân trời lên trên');
+
+  // 3b) Hướng nhìn/đi + Đường dẫn + cỡ Đồ vật — đích tính theo phần khung (u ngang, v dọc)
+  const dich = () => p.evaluate(() => { const R = KN.crop(), t = KN.st.assist.t; return { u: (t.x - R.x) / R.w, v: (t.y - R.y) / R.h, dirRow: asDir.children.length, ratio: document.querySelector('#ratios .chip.on').textContent }; });
+  const tapAt = async (u, v) => { await p.touchscreen.tap(stageBox.x + stageBox.w * u, stageBox.y + stageBox.h * v); await sleep(150); };
+  // người nhìn sang trái → đặt lệch PHẢI dù chạm bên trái; bước 2 ẩn hàng chọn hướng
+  await chip('#scenes .chip', 'Người'); await chip('#asDir .chip', '← Nhìn');
+  await p.screenshot({ path: OUT + '/a4b-huong-buoc1.png' });
+  await tapAt(0.25, 0.5); const d1 = await dich();
+  // cảnh rộng đi sang phải → tâm xoắn nằm nửa TRÁI dù chạm bên phải
+  await chip('#scenes .chip', 'Cảnh rộng'); await chip('#asDir .chip', 'Nhìn/đi sang phải');
+  await tapAt(0.75, 0.5); const d2 = await dich();
+  // đường dẫn: chạm điểm cuối thấp → đích ở 1/3 trên
+  await chip('#scenes .chip', 'Đường dẫn'); await tapAt(0.4, 0.75); const d3 = await dich();
+  await p.screenshot({ path: OUT + '/a4c-duong-dan.png' });
+  // đồ vật: Lấp đầy → đích ở tâm; Tối giản → đích ở giao điểm 1/3
+  await chip('#scenes .chip', 'Đồ vật'); await tapAt(0.3, 0.5);
+  await chip('#asOpts .chip', 'Lấp đầy'); const d4 = await dich();
+  await chip('#asOpts .chip', 'Tối giản'); const d5 = await dich(); d5.guide = await p.evaluate(() => KN.st.guide);
+  await p.screenshot({ path: OUT + '/a4d-toi-gian.png' });
+  console.log('huong', JSON.stringify(d1), JSON.stringify(d2), '| duong dan', JSON.stringify(d3), '| do vat', JSON.stringify(d4), JSON.stringify(d5));
+  assert(Math.abs(d1.u - 2 / 3) < 0.02 && d1.dirRow === 0, 'Người nhìn sang trái phải đặt ở 2/3 bên phải, bước 2 không còn hàng chọn hướng');
+  assert(d2.u < 0.5, 'Cảnh rộng đi sang phải phải đặt tâm xoắn bên trái');
+  assert(d3.ratio === '2:3' && Math.abs(d3.v - 1 / 3) < 0.02, 'Đường dẫn: điểm cuối phải về 1/3 trên, khung 2:3');
+  assert(Math.abs(d4.u - 0.5) < 0.02 && Math.abs(d4.v - 0.5) < 0.02, 'Lấp đầy phải đặt vật ở tâm');
+  const g3 = (x) => Math.abs(x - 1 / 3) < 0.02 || Math.abs(x - 2 / 3) < 0.02;
+  assert(g3(d5.u) && g3(d5.v) && d5.guide === 'thirds', 'Tối giản phải đặt vật ở một giao điểm 1/3 và vẽ lưới một phần ba');
   await p.click('#asClose');
   assert(await p.evaluate(() => KN.st.assist === null && document.getElementById('assist').hidden), 'nút ✕ không thoát hướng dẫn');
 

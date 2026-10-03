@@ -32,6 +32,7 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → (tuỳ chọn) c
 **Định nghĩa tiêu chí thành công trước. Lặp đến khi xác minh được.**
 - `node tests/grade.test.js` — kiểm bộ màu không cần trình duyệt (preset Gốc giữ nguyên pixel, preset khác phải đổi, đen trắng phải ra xám, gợi ý có lý do, nhận diện màu bổ túc).
 - `NODE_PATH="../web_task/node_modules" node tests/assist.js` (cần server 8765) — camera giả là **video tự dựng hoa văn trôi sang phải** với tốc độ biết trước: kiểm chấm bám chủ thể trôi đúng hướng/đúng khoảng cách, câu chỉ hướng lia máy đúng chiều, lựa chọn chân trời, nút ✕, toàn màn hình phủ kín, nút Lưu vào Ảnh hiện ngay và luồng Safari chặn → bấm lại.
+- `NODE_PATH="../web_task/node_modules" node tests/xoay-luu.js` (chạy sau assist.js vì dùng chung video thử) — chụp 2 tấm liền, ảnh lưu phải khác nhau; xoay ngang/dọc bằng đổi khổ (cùng `isMobile` nên không tải lại trang): khung đổi chiều, nút chụp trong màn, màn chỉnh màu ngang đủ lớn.
 - `NODE_PATH="../web_task/node_modules" node tests/e2e.js` (cần server 8765 đang chạy) — puppeteer + camera giả của Chrome: mở camera, đổi khung, thước cân bằng giả lập cả dấu Android lẫn iOS, chụp, chỉnh màu, tải ảnh, tải ảnh có sẵn, giữ-để-so. Ảnh chụp màn hình ra `$OUT` (mặc định `$TMPDIR/khung-ngam-test`) — **xem ảnh**, đừng chỉ đọc chữ PASS.
 - Thêm test mới thì phá code cho nó FAIL một lần để chắc test kiểm được thật.
 - Chạy thẳng trên link thật: thêm `URL=https://gaudilac.github.io/khung-ngam/` trước lệnh test.
@@ -52,8 +53,8 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → (tuỳ chọn) c
 - `index.html` — toàn bộ CSS (trong `<style>`) + markup của hai màn: `#cam` (chụp) và `#edit` (chỉnh màu). Màn đang hiện có class `.on`.
 - `app.js` — một IIFE, theo thứ tự: danh sách khung `GUIDES` + tỉ lệ `RATIOS` → vẽ khung (`cropRect`, `drawGuide`, `SPIRAL`) → camera (`startCamera`, `setupPro` zoom/bù sáng) → đo sáng (`meter`, `lumaStats`, `drawHist`) → thước cân bằng (`onMotion`, `levelLoop`) → chụp (`sourceRect`, `capture`) → màn chỉnh màu (`openEditor`, `buildPresets`, `render`, bảng màu) → xuất ảnh (`exportBlob`, dải bảng màu tuỳ chọn).
 - `grade.js` — `window.Grade`, **không đụng DOM** (chạy được trong Node): `PRESETS`, `analyze` (thống kê ảnh), `suggest` (chấm điểm preset), `resolve` (gộp preset + chỉnh tay), `apply` (xử lý pixel), `palette` (k-means hạt giống cố định), `harmony` (đọc quan hệ màu).
-- `tests/` — `grade.test.js`, `e2e.js`, `assist.js`.
-- `window.KN = { st }` — móc trạng thái cho test đọc, đừng xoá.
+- `tests/` — `grade.test.js`, `e2e.js`, `assist.js`, `xoay-luu.js`.
+- `window.KN = { st, crop }` — móc trạng thái cho test đọc, đừng xoá.
 
 ### "Chụp gì?" (SCENES trong app.js)
 Mỗi cảnh: `guide` + `ratio` + `land` (`'screen'` = theo chiều màn hình) + `place` (câu bước 1) + `tip` + `target(R, opt, p)` trả `{x, y}` (`null` = trục đó không xét; chân trời là `line: true`, chỉ xét y). `level: true` thì tự bật thước. Hai bước: **place** (chạm/kéo chỉ chủ thể) → thả tay `lockOn()` chụp mẫu → **guide** (bám + chỉ hướng, rung khi khớp).
@@ -66,6 +67,9 @@ Thêm một mục vào `GUIDES` (`id`, `name`, `variants`, `tip`) + một nhánh
 Thêm vào `PRESETS` (`id`, `name`, `note`, `p`) + một dòng chấm điểm trong `suggest` kèm `why`. Tham số `p` có sẵn: `ev, temp, tint, contrast, fade, lift, gain, gamma, hiRoll, sat, vib, splitS, splitH, to, greenDesat, bw, vig, grain`. Cập nhật số preset trong `tests/e2e.js` (đang kiểm 14).
 
 ## Bẫy đã biết
+- **Lưu vào Ảnh từng trả ẢNH CŨ** (user báo): ảnh xuất sẵn `ready` được nhận bằng `shareSig`, mà chữ ký chỉ có gam màu/độ đậm/chỉnh tay/bề rộng → tấm mới cùng gam + cùng cỡ bị coi là tấm cũ. Giờ chữ ký có `ed.shot` (tăng mỗi lần `openEditor`) và `openEditor` xoá `ready`. Thêm bộ nhớ đệm nào cho ảnh thì khoá theo `ed.shot`.
+- **Chiều khung theo chiều máy**: `st.landscape = isLand()` lúc mở trang, lúc chọn cảnh, và mỗi khi xoay (`onResize`). Đang hướng dẫn mà xoay máy thì làm lại từ bước 1 (toạ độ chủ thể cũ hết đúng). Bấm "Dọc/Ngang" tay vẫn được, tới lần xoay sau thì theo máy.
+- **Điện thoại cầm ngang có bố cục riêng** (media query `(orientation: landscape) and (max-height: 560px)` ở cuối `<style>`, JS đọc cùng điều kiện qua `landMQ`): nút chụp là cột phải, `.controls` thành `display: contents` để tỉ lệ nổi đáy ảnh, `insets()` né thanh chip trên + hàng tỉ lệ dưới. Đổi media query thì đổi cả `landMQ`. Màn chỉnh màu dùng bố cục 2 cột như máy tính.
 - **Nút lưu từng nằm dưới đáy vùng cuộn** nên user không thấy → giờ ở `.savebar` cố định ngoài `.panel`. Đừng đưa nút hành động chính vào vùng cuộn.
 - **iPad đời mới tự xưng "Macintosh" trong userAgent** → nhận điện thoại/máy tính bảng bằng `navigator.maxTouchPoints > 0`, không dò userAgent.
 - **Safari chỉ mở bảng chia sẻ ngay sau cú chạm**; xuất ảnh lớn mất 1–2 giây có thể làm mất cú chạm → `NotAllowedError`. Nút Lưu giữ ảnh đã xuất (`ready`, khoá theo `shareSig`) và đổi chữ "chạm lần nữa" — lần hai mở ngay. Chưa kiểm trên iPhone thật xem lần một có bị chặn không.

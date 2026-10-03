@@ -60,6 +60,14 @@ function makeVideo(file) {
   assert.deepStrictEqual([s1.guide, s1.ratio, s1.step.startsWith('Bước 1')], ['thirds', '4:5', true], 'chọn Người phải đặt khung một phần ba 4:5');
   // chủ thể ở dưới-trái, mục tiêu ở 1/3 trên-trái: chủ thể phải sang phải + lên trên → lia máy sang TRÁI, CHÚC xuống
   assert(s2.step.startsWith('Bước 2') && /sang trái/.test(s2.msg) && /chúc máy xuống/.test(s2.msg), 'chỉ sai hướng lia máy: ' + s2.msg);
+  // kiểu chụp: Toàn thân → khung 2:3, mắt cao hơn 1/3 (giữ trọn chân); Cận mặt → về 4:5
+  const kieu = () => p.evaluate(() => { const R = KN.crop(), t = KN.st.assist.t; return { ratio: document.querySelector('#ratios .chip.on').textContent, ty: (t.y - R.y) / R.h }; });
+  await chip('#asOpts .chip', 'Toàn thân'); const k1 = await kieu();
+  await p.screenshot({ path: OUT + '/a2b-toan-than.png' });
+  await chip('#asOpts .chip', 'Cận mặt'); const k2 = await kieu();
+  console.log('kieu chup', JSON.stringify(k1), JSON.stringify(k2));
+  assert(k1.ratio === '2:3' && Math.abs(k1.ty - 0.25) < 0.02, 'Toàn thân phải khung 2:3, mắt ở 0,25 chiều cao');
+  assert(k2.ratio === '4:5' && Math.abs(k2.ty - 1 / 3) < 0.02, 'Cận mặt phải về khung 4:5, mắt ở 1/3');
 
   // 2) Bám chủ thể: cảnh trôi sang phải → chấm phải trôi sang phải, không mất dấu
   await chip('#scenes .chip', 'Đồ vật');

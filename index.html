@@ -32,16 +32,42 @@
     border: 1px solid var(--line); white-space: nowrap; font-size: 13px; }
   .chip.on { color: #111; background: var(--accent); border-color: var(--accent); font-weight: 600; }
   .chip .cyc { opacity: .7; margin-left: 4px; }
+  .chip.scene.on { background: #f2f2f2; border-color: #f2f2f2; color: #111; }
+  .scenes { margin-bottom: 8px; }
+  .scenes .chips { flex: 1; min-width: 0; }
+  .lbl { flex: none; font-size: 12px; color: var(--muted); }
+  .round.sm { width: 36px; height: 36px; flex: none; }
+  .round.sm svg { width: 18px; height: 18px; }
 
   .stage { position: relative; overflow: hidden; background: #000; touch-action: manipulation; }
+  /* toàn màn hình: ảnh phủ kín, hai thanh điều khiển nổi đè lên */
+  #cam.full { grid-template-rows: minmax(0, 1fr); }
+  #cam.full > * { grid-area: 1 / 1; }
+  #cam.full .topbar { align-self: start; background: linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,0)); padding-bottom: 16px; }
+  #cam.full .controls { align-self: end; background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.65)); padding-top: 22px; }
+  #cam.full .chip:not(.on), #cam.full .round { background: rgba(0,0,0,.42); border-color: rgba(255,255,255,.16); color: #eee; }
+  #cam.full .small, #cam.full .lbl { color: #ddd; text-shadow: 0 1px 3px #000; }
+  #cam.full #fullBtn { color: var(--accent); }
+  .assist { position: absolute; left: 12px; right: 12px; top: calc(var(--insT, 0px) + 10px); padding: 10px 12px; border-radius: 12px;
+    background: rgba(0,0,0,.66); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 13.5px; }
+  .assist .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: #bbb; }
+  .assist .h b { color: var(--accent); font-size: 13px; }
+  .assist .h button { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.12); }
+  .assist .msg { font-weight: 500; }
+  .assist.ok .msg { color: var(--ok); }
+  .assist .opts { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .assist .opts:not(:empty) { margin-top: 8px; }
+  .assist .opts .chip { padding: 4px 9px; font-size: 12px; }
+  .assist .tipx { color: #b5b5b5; font-size: 12px; margin-top: 6px; }
+  .assist .tipx:empty { display: none; }
   #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
   #video.mirror { transform: scaleX(-1); }
   #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .tip { position: absolute; left: 12px; right: 12px; top: 10px; padding: 8px 12px; border-radius: 10px;
+  .tip { position: absolute; left: 12px; right: 12px; top: calc(var(--insT, 0px) + 10px); padding: 8px 12px; border-radius: 10px;
     background: rgba(0,0,0,.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     font-size: 12.5px; color: #ddd; transition: opacity .3s; }
   .tip.hide { opacity: 0; pointer-events: none; }
-  .meter { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 8px;
+  .meter { position: absolute; right: 12px; bottom: calc(var(--insB, 0px) + 12px); display: flex; align-items: flex-end; gap: 8px;
     pointer-events: none; }
   .meter canvas { width: 96px; height: 34px; background: rgba(0,0,0,.45); border-radius: 6px; }
   .meter span { font-size: 11.5px; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 6px; }
@@ -82,7 +108,7 @@
   #shutter:disabled { opacity: .35; }
 
   /* ---------- Màn chỉnh màu ---------- */
-  #edit { grid-template-rows: auto minmax(0, 1fr) auto; }
+  #edit { grid-template-rows: auto minmax(0, 1fr) auto auto; }
   .ehead { display: flex; align-items: center; justify-content: space-between; padding: calc(var(--safe-t) + 8px) 10px 8px; }
   .ehead h1 { font-size: 15px; font-weight: 600; margin: 0; }
   .txtbtn { padding: 8px 10px; border-radius: 8px; color: var(--muted); }
@@ -96,7 +122,7 @@
   #ehist { position: absolute; right: 20px; top: 10px; width: 96px; height: 34px; background: rgba(0,0,0,.45);
     border-radius: 6px; pointer-events: none; }
 
-  .panel { background: var(--bg); padding: 10px 0 calc(var(--safe-b) + 10px); max-height: 52dvh; overflow-y: auto; }
+  .panel { background: var(--bg); padding: 10px 0 4px; max-height: 42dvh; overflow-y: auto; }
   .sect { padding: 0 14px; margin-bottom: 12px; }
   .sect h2 { font-size: 11.5px; font-weight: 500; color: var(--muted); margin: 0 0 7px; letter-spacing: .04em; text-transform: uppercase;
     display: flex; justify-content: space-between; gap: 8px; }
@@ -122,7 +148,9 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   details summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; list-style: none; }
   details summary::before { content: "▸ "; } details[open] summary::before { content: "▾ "; }
-  .save { display: flex; gap: 8px; padding: 4px 14px 0; align-items: center; flex-wrap: wrap; }
+  /* nút lưu luôn nằm ngoài vùng cuộn — trước đây nằm dưới đáy panel nên người dùng không thấy */
+  .savebar { display: flex; gap: 8px; padding: 8px 14px calc(var(--safe-b) + 10px); align-items: center; flex-wrap: wrap;
+    border-top: 1px solid var(--line); background: var(--bg); }
   .primary { flex: 1; min-width: 140px; padding: 12px; border-radius: 10px; background: var(--accent); color: #111; font-weight: 600; }
   .secondary { flex: 1; min-width: 140px; padding: 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
   .primary:disabled, .secondary:disabled { opacity: .5; }
@@ -132,9 +160,11 @@
   .toast.on { opacity: 1; }
 
   @media (min-width: 900px) {
-    #edit { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto 1fr; }
-    .ehead { grid-column: 1 / -1; }
+    #edit { grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-areas: "h h" "v p" "v s"; }
+    .ehead { grid-area: h; } .view { grid-area: v; } .panel { grid-area: p; } .savebar { grid-area: s; }
     .panel { max-height: none; border-left: 1px solid var(--line); padding-top: 14px; }
+    .savebar { border-left: 1px solid var(--line); }
     .view { padding: 0 20px 20px; }
   }
 </style>
@@ -142,12 +172,23 @@
 <body>
 
 <section id="cam" class="screen on" aria-label="Chụp ảnh">
-  <div class="topbar"><div class="chips" id="guides"></div></div>
+  <div class="topbar">
+    <div class="row scenes"><span class="lbl">Chụp gì?</span><div class="chips" id="scenes"></div>
+      <button class="round sm" id="fullBtn" aria-label="Toàn màn hình" title="Toàn màn hình">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
+    <div class="chips" id="guides"></div>
+  </div>
   <div class="stage" id="stage">
     <video id="video" playsinline muted autoplay></video>
     <canvas id="overlay"></canvas>
     <div id="level"><div class="ref"></div><div class="bar"></div><span class="deg"></span></div>
     <div class="tip" id="tip"></div>
+    <div class="assist" id="assist" hidden>
+      <div class="h"><span><b id="asTitle"></b> <span id="asStep"></span></span><button id="asClose" aria-label="Thoát hướng dẫn">✕</button></div>
+      <div class="msg" id="asMsg"></div>
+      <div class="opts" id="asOpts"></div>
+      <div class="tipx" id="asTip"></div>
+    </div>
     <div class="meter"><span id="meterTxt"></span><canvas id="hist" width="192" height="68"></canvas></div>
     <div id="flash"></div>
     <div id="countdown"></div>
@@ -206,11 +247,11 @@
         <div id="adjs"></div>
       </details>
     </div>
-    <div class="save">
-      <label class="check"><input type="checkbox" id="withPal"> Kèm dải bảng màu dưới ảnh</label>
-      <button class="primary" id="dl">Tải ảnh về</button>
-      <button class="secondary" id="share" hidden>Lưu vào Ảnh / Chia sẻ</button>
-    </div>
+  </div>
+  <div class="savebar">
+    <label class="check"><input type="checkbox" id="withPal"> Kèm dải bảng màu dưới ảnh</label>
+    <button class="primary" id="share" hidden>Lưu vào Ảnh</button>
+    <button class="primary" id="dl">Tải ảnh về</button>
   </div>
 </section>
 

@@ -29,14 +29,15 @@
   const SCENES = [
     { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5],
       place: 'Chạm hoặc kéo chấm tròn lên MẮT người được chụp',
-      tip: 'Khoe biểu cảm → Cận mặt · áo, phụ kiện → Bán thân · dáng, cả bộ đồ → Toàn thân · nơi đã đến → Trong cảnh. Nền sau rối thì chụp càng cận càng tốt.',
-      // [id, tên, độ cao của mắt trong khung, {tỉ lệ, mẹo riêng}]
+      tip: 'Khoe biểu cảm → Cận mặt · áo, phụ kiện → Bán thân · dáng, cả bộ đồ → Toàn thân · nơi đã đến → Trong cảnh. Nền sau rối thì chụp càng cận càng tốt. Viền người ở bước 2 là dáng đứng — ngồi hay tạo dáng thì chỉ dùng để ước cỡ.',
+      fit: 'tiến/lùi cho người vừa khít viền',
+      // [id, tên, độ cao của mắt trong khung, {tỉ lệ, mẹo riêng, body = cỡ đầu so với chiều cao khung}]
       opts: [
-        ['face', 'Cận mặt', 1 / 3, { ratio: [4, 5], tip: 'Cắt mất đỉnh tóc cũng được, nhưng đừng cắt cằm. Đứng lùi ra rồi zoom nếu máy có — dí máy sát mặt làm mũi to ra.' }],
-        ['half', 'Bán thân', 1 / 3, { ratio: [4, 5], tip: 'Mép dưới cắt giữa ngực hoặc ngang eo, đừng cắt ngang cổ hay khuỷu tay. Máy ngang tầm mắt người được chụp.' }],
+        ['face', 'Cận mặt', 1 / 3, { ratio: [4, 5], body: 0.37, tip: 'Cắt mất đỉnh tóc cũng được, nhưng đừng cắt cằm. Đứng lùi ra rồi zoom nếu máy có — dí máy sát mặt làm mũi to ra.' }],
+        ['half', 'Bán thân', 1 / 3, { ratio: [4, 5], body: 0.2, tip: 'Mép dưới cắt giữa ngực hoặc ngang eo, đừng cắt ngang cổ hay khuỷu tay. Máy ngang tầm mắt người được chụp.' }],
         // toàn thân: mắt cao hơn 1/3 để người chiếm gần hết chiều cao, không thừa trời trên đầu (cao hơn 0,25 thì bảng hướng dẫn che vòng đích)
-        ['full', 'Toàn thân', 0.25, { ratio: [2, 3], tip: 'Tiến/lùi cho tới khi bàn chân còn cách mép dưới một chút — đừng cắt mất chân. Hạ máy xuống ngang hông cho chân dài, đừng chụp chúc từ trên xuống.' }],
-        ['env', 'Trong cảnh', 1 / 3, { ratio: [2, 3], tip: 'Người nhỏ thôi, cảnh chiếm phần lớn khung. Người nhìn hoặc đi về phía khoảng trống, không nhìn ra mép ảnh.' }],
+        ['full', 'Toàn thân', 0.25, { ratio: [2, 3], body: 0.1, tip: 'Tiến/lùi cho tới khi bàn chân còn cách mép dưới một chút — đừng cắt mất chân. Hạ máy xuống ngang hông cho chân dài, đừng chụp chúc từ trên xuống.' }],
+        ['env', 'Trong cảnh', 1 / 3, { ratio: [2, 3], body: 0.035, tip: 'Người nhỏ thôi, cảnh chiếm phần lớn khung. Người nhìn hoặc đi về phía khoảng trống, không nhìn ra mép ảnh.' }],
       ],
       target: (R, o, p) => nearest(p, o[0] === 'env'
         ? [[1 / 3, 1 / 3], [2 / 3, 1 / 3], [1 / 3, 2 / 3], [2 / 3, 2 / 3]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v])
@@ -53,6 +54,7 @@
     { id: 'object', name: 'Đồ vật', guide: 'phi', ratio: [1, 1],
       place: 'Chạm lên CHỦ THỂ (món ăn, bông hoa, sản phẩm)',
       tip: 'Nền càng gọn càng tốt, để khoảng thở quanh vật. Món ăn đẹp nhất khi chụp thẳng từ trên xuống hoặc nghiêng 45°.',
+      fit: 'tiến/lùi cho vật nằm gọn trong ô', box: 0.45,
       target: (R, o, p) => nearest(p, PHI_PTS(R)) },
     { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3],
       place: 'Chạm lên ĐIỂM NHẤN nhỏ trong cảnh (một người, con thuyền, cái cây đơn độc)',
@@ -497,7 +499,8 @@
       const dx = t.x == null ? 0 : t.x - p.x, dy = t.y == null ? 0 : t.y - p.y;
       ok = !a.lost && Math.abs(dx) < tol && Math.abs(dy) < tol;
       if (a.lost) msg = 'Mất dấu chủ thể — chạm lại vào chủ thể để bám tiếp';
-      else if (ok) msg = 'Chuẩn rồi — giữ yên máy và bấm chụp!';
+      // đúng chỗ rồi mới nhắc canh cỡ — nói cùng lúc thì bảng dài thêm dòng, che mất vòng đích
+      else if (ok) msg = a.s.fit ? 'Đúng chỗ rồi — ' + a.s.fit + ', rồi bấm chụp' : 'Chuẩn rồi — giữ yên máy và bấm chụp!';
       else if (video.classList.contains('mirror')) msg = 'Dịch máy để chấm đi theo mũi tên vào vòng vàng';
       else {
         // chủ thể cần sang phải trong khung thì máy phải lia sang trái, và ngược lại
@@ -532,12 +535,37 @@
     ctx.lineTo(ex - Math.cos(ang + 0.5) * 12, ey - Math.sin(ang + 0.5) * 12); ctx.stroke();
     ctx.restore();
   }
+  // Viền người dáng đứng, nửa phải, đơn vị = chiều cao đầu, gốc ở giữa hai mắt. Người cao ~7,5 đầu.
+  const BODY = [[0.18, 0.48], [0.2, 0.75], [0.75, 0.9], [1, 1.15], [1.08, 1.6], [1.12, 2.6], [1.1, 3.8], [1.05, 4.1], [0.88, 4.1],
+    [0.86, 3.7], [0.86, 2.6], [0.78, 1.75], [0.72, 2.6], [0.68, 3.1], [0.82, 3.9], [0.72, 5.2], [0.6, 6.6], [0.62, 7], [0.18, 7],
+    [0.2, 6.6], [0.16, 5.2], [0.05, 4.1], [0, 4.05]];
+  // nét đứt đôi (viền tối + nét trắng mờ), cắt theo khung để thấy rõ mép ảnh cắt người ở đâu
+  function drawFit(ctx, R, a) {
+    const t = a.t, o = a.opt && a.opt[3];
+    if (!t || t.x == null || t.y == null || !((o && o.body) || a.s.box)) return;
+    ctx.save(); ctx.beginPath(); ctx.rect(R.x, R.y, R.w, R.h); ctx.clip(); ctx.beginPath();
+    if (o && o.body) {
+      const h = o.body * R.h, X = (u) => t.x + u * h, Y = (v) => t.y + v * h;
+      ctx.ellipse(t.x, Y(-0.03), 0.38 * h, 0.53 * h, 0, 0, Math.PI * 2);
+      ctx.moveTo(X(BODY[0][0]), Y(BODY[0][1]));
+      BODY.forEach(([u, v]) => ctx.lineTo(X(u), Y(v)));
+      BODY.slice().reverse().forEach(([u, v]) => ctx.lineTo(X(-u), Y(v)));
+    } else {
+      const d = a.s.box * Math.min(R.w, R.h);
+      ctx.roundRect(t.x - d / 2, t.y - d / 2, d, d, d * 0.08);
+    }
+    ctx.lineJoin = 'round'; ctx.setLineDash([7, 6]);
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.restore();
+  }
   function drawAssist(ctx, R) {
     const a = st.assist; if (!a) return;
     const col = a.ok ? '#6fd08c' : '#e9b44c', p = subjectPoint(a);
     ctx.save();
     if (a.phase === 'guide' && a.t) {
       const t = a.t;
+      drawFit(ctx, R, a);
       ctx.setLineDash([8, 6]); ctx.strokeStyle = col; ctx.lineWidth = 2;
       if (t.x == null) { ctx.beginPath(); ctx.moveTo(R.x, t.y); ctx.lineTo(R.x + R.w, t.y); ctx.stroke(); }
       else if (t.y == null) { ctx.beginPath(); ctx.moveTo(t.x, R.y); ctx.lineTo(t.x, R.y + R.h); ctx.stroke(); }

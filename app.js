@@ -24,11 +24,44 @@
   // [rộng, cao] theo chiều dọc; null = cả khung ngắm
   const RATIOS = [[2, 3], [4, 5], [3, 4], [1, 1], [9, 16], null];
 
+  // "Chụp gì?" — người mới chọn loại cảnh, app tự chọn khung + tỉ lệ rồi chỉ chỗ đặt chủ thể.
+  // target(R, opt): điểm/đường cần đưa chủ thể tới, trong toạ độ khung ngắm (null = trục đó không quan trọng).
+  const SCENES = [
+    { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5], land: false,
+      place: 'Chạm hoặc kéo chấm tròn lên MẮT người được chụp',
+      tip: 'Mắt nằm trên đường 1/3 phía trên, chừa khoảng trống về phía người đang nhìn. Đừng để mép khung cắt ngang cổ, khuỷu tay hay đầu gối.',
+      target: (R, o, p) => nearest(p, [[R.x + R.w / 3, R.y + R.h / 3], [R.x + R.w * 2 / 3, R.y + R.h / 3]]) },
+    { id: 'horizon', name: 'Chân trời', guide: 'thirds', ratio: [2, 3], land: 'screen', line: true, level: true,
+      place: 'Kéo vạch ngang cho trùng ĐƯỜNG CHÂN TRỜI (mép biển, dải núi, mép ruộng)',
+      tip: 'Đừng đặt chân trời ngay giữa ảnh — trừ khi chụp phản chiếu mặt nước. Phần nào đẹp hơn thì cho phần đó 2/3 khung.',
+      opts: [['sky', 'Trời đẹp', 2 / 3], ['ground', 'Cảnh dưới đẹp', 1 / 3], ['mirror', 'Phản chiếu nước', 1 / 2]],
+      target: (R, o) => ({ x: null, y: R.y + R.h * o[2] }) },
+    { id: 'arch', name: 'Kiến trúc', guide: 'center', ratio: [4, 5], land: false, level: true,
+      place: 'Chạm vào TRỤC GIỮA công trình (cửa chính, đỉnh mái, tháp)',
+      tip: 'Đứng đúng trục giữa và giữ máy thẳng đứng — ngửa máy lên làm các cột chụm vào nhau. Thiếu chỗ thì lùi xa ra, đừng ngửa máy.',
+      target: (R) => ({ x: R.x + R.w / 2, y: null }) },
+    { id: 'object', name: 'Đồ vật', guide: 'phi', ratio: [1, 1], land: false,
+      place: 'Chạm lên CHỦ THỂ (món ăn, bông hoa, sản phẩm)',
+      tip: 'Nền càng gọn càng tốt, để khoảng thở quanh vật. Món ăn đẹp nhất khi chụp thẳng từ trên xuống hoặc nghiêng 45°.',
+      target: (R, o, p) => nearest(p, PHI_PTS(R)) },
+    { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3], land: 'screen',
+      place: 'Chạm lên ĐIỂM NHẤN nhỏ trong cảnh (một người, con thuyền, cái cây đơn độc)',
+      tip: 'Điểm nhấn nằm ở tâm xoắn, phần còn lại của cảnh dẫn mắt về đó. Chủ thể đang di chuyển thì chừa khoảng trống phía trước nó.',
+      target: (R) => { const e = spiralMap(R, st.variant)(SPIRAL.eye); return { x: e[0], y: e[1] }; } },
+  ];
+  const PHI_PTS = (R) => { const a = 1 - 1 / PHI, b = 1 / PHI; return [[a, a], [b, a], [a, b], [b, b]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v]); };
+  function nearest(p, pts) {
+    let best = pts[0], bd = Infinity;
+    pts.forEach((q) => { const d = (q[0] - p.x) ** 2 + (q[1] - p.y) ** 2; if (d < bd) { bd = d; best = q; } });
+    return { x: best[0], y: best[1] };
+  }
+
   const st = {
     guide: 'thirds', variant: 0, ratio: RATIOS[0], landscape: false,
     facing: 'environment', stream: null, track: null, timer: 0, busy: false,
-    level: false, roll: null,
+    level: false, roll: null, pitch: null, full: false, assist: null,
   };
+  window.KN = { st }; // móc cho tests/e2e.js
 
   const stage = $('stage'), video = $('video'), ov = $('overlay'), octx = ov.getContext('2d');
 
@@ -75,20 +108,26 @@
   let tipTimer;
   function showTip() {
     const g = GUIDES.find((x) => x.id === st.guide), t = $('tip');
-    t.textContent = g.tip; t.classList.toggle('hide', !g.tip);
+    t.textContent = g.tip; t.classList.toggle('hide', !g.tip || !!st.assist);
     clearTimeout(tipTimer); tipTimer = setTimeout(() => t.classList.add('hide'), 9000);
   }
   $('tip').onclick = () => $('tip').classList.add('hide');
 
   // ---------- Hình học khung ----------
+  // Toàn màn hình: thanh trên/dưới nổi đè lên ảnh, khung có tỉ lệ thì né hai thanh đó
+  function insets() {
+    if (!st.full) return [0, 0];
+    return [$('cam').querySelector('.topbar').offsetHeight, $('cam').querySelector('.controls').offsetHeight];
+  }
   function cropRect() {
     const W = stage.clientWidth, H = stage.clientHeight;
     if (!st.ratio) return { x: 0, y: 0, w: W, h: H };
+    const [top, bot] = insets(), AH = H - top - bot;
     const [a, b] = st.landscape ? [st.ratio[1], st.ratio[0]] : st.ratio;
     const pad = 10, r = a / b;
     let w = W - pad * 2, h = w / r;
-    if (h > H - pad * 2) { h = H - pad * 2; w = h * r; }
-    return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+    if (h > AH - pad * 2) { h = AH - pad * 2; w = h * r; }
+    return { x: (W - w) / 2, y: top + (AH - h) / 2, w, h };
   }
 
   function line(ctx, pts) {
@@ -131,6 +170,14 @@
     return { pts, squares, eye: [x + w / 2, y + h / 2] };
   }
   const SPIRAL = spiralPoints();
+  function spiralMap(R, variant) {
+    const portrait = R.h > R.w, fx = variant & 1, fy = (variant >> 1) & 1;
+    return ([u, v]) => {
+      let nu = u / PHI, nv = v; // 0..1
+      if (fx) nu = 1 - nu; if (fy) nv = 1 - nv;
+      return portrait ? [R.x + R.w * nv, R.y + R.h * nu] : [R.x + R.w * nu, R.y + R.h * nv];
+    };
+  }
 
   function drawGuide(ctx, R, guide, variant) {
     const X = (f) => R.x + R.w * f, Y = (f) => R.y + R.h * f;
@@ -139,13 +186,7 @@
       [a, b].forEach((f) => { line(ctx, [[X(f), R.y], [X(f), R.y + R.h]]); line(ctx, [[R.x, Y(f)], [R.x + R.w, Y(f)]]); });
       [a, b].forEach((fx) => [a, b].forEach((fy) => dot(ctx, X(fx), Y(fy))));
     } else if (guide === 'spiral') {
-      const portrait = R.h > R.w;
-      const fx = variant & 1, fy = (variant >> 1) & 1;
-      const map = ([u, v]) => {
-        let nu = u / PHI, nv = v; // 0..1
-        if (fx) nu = 1 - nu; if (fy) nv = 1 - nv;
-        return portrait ? [R.x + R.w * nv, R.y + R.h * nu] : [R.x + R.w * nu, R.y + R.h * nv];
-      };
+      const map = spiralMap(R, variant);
       ctx.save(); ctx.globalAlpha = 0.45;
       SPIRAL.squares.slice(0, 6).forEach(([a, b, c, d]) => line(ctx, [map([a, b]), map([c, d])]));
       ctx.restore();
@@ -192,6 +233,9 @@
     octx.beginPath(); octx.rect(0, 0, W, H); octx.rect(R.x, R.y, R.w, R.h); octx.fill('evenodd');
     octx.strokeStyle = 'rgba(255,255,255,.5)'; octx.lineWidth = 1; octx.strokeRect(R.x + 0.5, R.y + 0.5, R.w - 1, R.h - 1);
     drawGuide(octx, R, st.guide, st.variant);
+    drawAssist(octx, R);
+    const [top, bot] = insets(), cam = $('cam');
+    cam.style.setProperty('--insT', top + 'px'); cam.style.setProperty('--insB', bot + 'px');
     const lv = $('level');
     lv.style.left = (R.x + R.w * 0.27) + 'px'; lv.style.top = (R.y + R.h / 2) + 'px'; lv.style.width = (R.w * 0.46) + 'px';
   }
@@ -305,9 +349,11 @@
     let sy = g.x * Math.sin(ang) + g.y * Math.cos(ang);
     // iOS và Android ngược dấu nhau; "phía trên" của màn hình luôn là chiều ngược trọng lực
     if (sy < 0) { sx = -sx; sy = -sy; }
-    lp = lp ? [lp[0] * 0.8 + sx * 0.2, lp[1] * 0.8 + sy * 0.2] : [sx, sy];
+    lp = lp ? [lp[0] * 0.8 + sx * 0.2, lp[1] * 0.8 + sy * 0.2, lp[2] * 0.8 + (g.z || 0) * 0.2] : [sx, sy, g.z || 0];
     const inPlane = Math.hypot(lp[0], lp[1]);
     st.roll = inPlane > 5 ? Math.atan2(lp[0], lp[1]) * 180 / Math.PI : null;
+    // góc ngửa/chúc máy — dấu z cũng ngược giữa iOS và Android nên chỉ dùng độ lớn
+    st.pitch = inPlane > 5 ? Math.atan2(lp[2], inPlane) * 180 / Math.PI : null;
   }
   function levelLoop() {
     const lv = $('level');
@@ -323,8 +369,13 @@
     requestAnimationFrame(levelLoop);
   }
   requestAnimationFrame(levelLoop);
-  $('levelBtn').onclick = async () => {
+  $('levelBtn').onclick = () => {
     if (st.level) { st.level = false; $('levelTxt').textContent = 'Cân bằng'; return; }
+    enableLevel();
+  };
+  // phải gọi ngay trong cú chạm: iOS chỉ hỏi quyền cảm biến khi có thao tác của người dùng
+  async function enableLevel(quiet) {
+    if (st.level) return;
     try {
       if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
         if ((await DeviceMotionEvent.requestPermission()) !== 'granted') { toast('Chưa được phép đọc cảm biến nghiêng'); return; }
@@ -332,8 +383,219 @@
     } catch (e) { toast('Không xin được quyền cảm biến'); return; }
     window.addEventListener('devicemotion', onMotion);
     st.level = true; $('levelTxt').textContent = 'Đang bật';
-    setTimeout(() => { if (st.level && st.roll == null) toast('Máy này không có cảm biến nghiêng (hoặc đang để nằm phẳng)'); }, 1500);
+    if (!quiet) setTimeout(() => { if (st.level && st.roll == null) toast('Máy này không có cảm biến nghiêng (hoặc đang để nằm phẳng)'); }, 1500);
+  }
+
+  // ---------- Toàn màn hình ----------
+  $('fullBtn').onclick = () => {
+    st.full = !st.full; $('cam').classList.toggle('full', st.full);
+    const de = document.documentElement;
+    if (st.full && document.fullscreenEnabled && de.requestFullscreen) de.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    else if (!st.full && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    // iPhone không cho web ẩn thanh địa chỉ; chỉ mở từ Màn hình chính mới chiếm trọn màn
+    else if (st.full && !navigator.standalone && /iPhone|iPod/.test(navigator.userAgent)) toast('Muốn ẩn cả thanh địa chỉ: Chia sẻ → Thêm vào MH chính, rồi mở từ biểu tượng đó');
+    requestAnimationFrame(draw);
   };
+
+  // ---------- "Chụp gì?": đặt chủ thể → app chỉ chỗ → bám theo chủ thể ----------
+  function renderSceneChips() {
+    const box = $('scenes'); box.innerHTML = '';
+    SCENES.forEach((s) => {
+      const b = document.createElement('button');
+      b.className = 'chip scene' + (st.assist && st.assist.s === s ? ' on' : '');
+      b.textContent = s.name;
+      b.onclick = () => (st.assist && st.assist.s === s ? exitAssist() : startAssist(s));
+      box.appendChild(b);
+    });
+  }
+  function startAssist(s) {
+    if (s.level) enableLevel(true);
+    st.guide = s.guide; st.variant = 0;
+    st.ratio = RATIOS.find((r) => r && r[0] === s.ratio[0] && r[1] === s.ratio[1]);
+    st.landscape = s.land === 'screen' ? stage.clientWidth > stage.clientHeight : false;
+    const R = cropRect();
+    st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, pts: [], ok: false, lost: false };
+    setSubject(R.x + R.w / 2, R.y + R.h / 2);
+    stage.style.touchAction = 'none';
+    renderGuideChips(); renderRatioChips(); renderSceneChips(); showTip(); renderAssistOpts(); updateAssist(); draw();
+  }
+  function exitAssist() {
+    st.assist = null; stage.style.touchAction = '';
+    $('assist').hidden = true; renderSceneChips(); draw();
+  }
+  $('asClose').onclick = exitAssist;
+  function renderAssistOpts() {
+    const a = st.assist, box = $('asOpts'); box.innerHTML = '';
+    (a.s.opts || []).forEach((o) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (a.opt === o ? ' on' : ''); b.textContent = o[1];
+      b.onclick = () => { a.opt = o; renderAssistOpts(); updateAssist(); draw(); };
+      box.appendChild(b);
+    });
+  }
+  function setSubject(x, y) {
+    const a = st.assist, R = cropRect();
+    // chân trời: bám 2 điểm trên vạch để đường vẫn bám được khi một đầu là trời trơn
+    a.pts = a.s.line ? [{ x: R.x + R.w * 0.3, y }, { x: R.x + R.w * 0.7, y }] : [{ x, y }];
+    a.lost = false;
+  }
+  function subjectPoint(a) {
+    const live = a.pts.filter((p) => !p.lost), ps = live.length ? live : a.pts;
+    return { x: ps.reduce((s, p) => s + p.x, 0) / ps.length, y: ps.reduce((s, p) => s + p.y, 0) / ps.length };
+  }
+  function lockOn() {
+    const a = st.assist, f = grab();
+    a.pts.forEach((p) => (p.tpl = f ? patchAt(f, p) : null));
+    a.lowTex = a.pts.every((p) => !p.tpl || p.tpl.std < 7);
+    if (a.s.id === 'wide') {
+      // chọn hướng xoắn có tâm gần chủ thể nhất — ít phải lia máy nhất
+      const R = cropRect(), p = subjectPoint(a); let bd = Infinity;
+      for (let v = 0; v < 4; v++) { const e = spiralMap(R, v)(SPIRAL.eye), d = (e[0] - p.x) ** 2 + (e[1] - p.y) ** 2; if (d < bd) { bd = d; st.variant = v; } }
+    }
+    a.phase = 'guide'; updateAssist(); draw();
+  }
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  function updateAssist() {
+    const a = st.assist; if (!a) return;
+    const box = $('assist'); box.hidden = false;
+    const R = cropRect();
+    let msg, ok = false;
+    if (a.phase === 'place') msg = a.s.place;
+    else {
+      const p = subjectPoint(a), t = a.s.target(R, a.opt, p); a.t = t; a.p = p;
+      const tol = Math.max(14, Math.min(R.w, R.h) * 0.045);
+      const dx = t.x == null ? 0 : t.x - p.x, dy = t.y == null ? 0 : t.y - p.y;
+      ok = !a.lost && Math.abs(dx) < tol && Math.abs(dy) < tol;
+      if (a.lost) msg = 'Mất dấu chủ thể — chạm lại vào chủ thể để bám tiếp';
+      else if (ok) msg = 'Chuẩn rồi — giữ yên máy và bấm chụp!';
+      else if (video.classList.contains('mirror')) msg = 'Dịch máy để chấm đi theo mũi tên vào vòng vàng';
+      else {
+        // chủ thể cần sang phải trong khung thì máy phải lia sang trái, và ngược lại
+        const parts = [];
+        if (Math.abs(dx) >= tol) parts.push(dx > 0 ? 'lia máy sang trái' : 'lia máy sang phải');
+        if (Math.abs(dy) >= tol) parts.push(dy > 0 ? 'ngửa máy lên' : 'chúc máy xuống');
+        const goal = a.s.line ? 'vạch trắng trùng vạch vàng' : a.t.y == null ? 'chấm chạm vạch vàng' : 'chấm vào vòng vàng';
+        msg = cap(parts.join(', ')) + ' cho tới khi ' + goal;
+      }
+      if (a.lowTex && !a.lost) msg += ' · Chỗ vừa chọn hơi trơn, app khó bám — chạm vào chỗ có chi tiết rõ hơn';
+      if (a.s.id === 'arch' && st.pitch != null && Math.abs(st.pitch) > 4) msg += ` · Máy đang ngửa/chúc ${Math.abs(st.pitch).toFixed(0)}° — giữ thẳng đứng để cột không chụm vào nhau`;
+    }
+    if (ok && !a.ok && navigator.vibrate) navigator.vibrate(15);
+    a.ok = ok;
+    box.classList.toggle('ok', ok);
+    const step = a.phase === 'place' ? 'Bước 1/2 · Chỉ chủ thể' : 'Bước 2/2 · Căn khung';
+    if ($('asTitle').textContent !== a.s.name) $('asTitle').textContent = a.s.name;
+    if ($('asStep').textContent !== step) $('asStep').textContent = step;
+    if ($('asMsg').textContent !== msg) $('asMsg').textContent = msg;
+    // mẹo chỉ hiện ở bước 1 — bước 2 thu gọn để không che mục tiêu ở 1/3 phía trên
+    const tip = a.phase === 'place' ? a.s.tip : '';
+    if ($('asTip').textContent !== tip) $('asTip').textContent = tip;
+  }
+  function arrow(ctx, x1, y1, x2, y2, col) {
+    const ang = Math.atan2(y2 - y1, x2 - x1), L = Math.hypot(x2 - x1, y2 - y1), back = Math.min(26, L * 0.5);
+    const ex = x2 - Math.cos(ang) * back * 0.9, ey = y2 - Math.sin(ang) * back * 0.9;
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1 + Math.cos(ang) * 18, y1 + Math.sin(ang) * 18); ctx.lineTo(ex, ey);
+    ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 6; ctx.stroke(); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - Math.cos(ang - 0.5) * 12, ey - Math.sin(ang - 0.5) * 12); ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - Math.cos(ang + 0.5) * 12, ey - Math.sin(ang + 0.5) * 12); ctx.stroke();
+    ctx.restore();
+  }
+  function drawAssist(ctx, R) {
+    const a = st.assist; if (!a) return;
+    const col = a.ok ? '#6fd08c' : '#e9b44c', p = subjectPoint(a);
+    ctx.save();
+    if (a.phase === 'guide' && a.t) {
+      const t = a.t;
+      ctx.setLineDash([8, 6]); ctx.strokeStyle = col; ctx.lineWidth = 2;
+      if (t.x == null) { ctx.beginPath(); ctx.moveTo(R.x, t.y); ctx.lineTo(R.x + R.w, t.y); ctx.stroke(); }
+      else if (t.y == null) { ctx.beginPath(); ctx.moveTo(t.x, R.y); ctx.lineTo(t.x, R.y + R.h); ctx.stroke(); }
+      ctx.setLineDash([]);
+      if (t.x != null && t.y != null) {
+        ctx.beginPath(); ctx.arc(t.x, t.y, 24, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 6; ctx.stroke(); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+      }
+      if (!a.ok && !a.lost) arrow(ctx, p.x, p.y, t.x == null ? p.x : t.x, t.y == null ? p.y : t.y, col);
+    }
+    ctx.globalAlpha = a.lost ? 0.45 : 1;
+    if (a.s.line) {
+      ctx.beginPath(); ctx.moveTo(R.x, p.y); ctx.lineTo(R.x + R.w, p.y);
+      ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.restore();
+  }
+  // kéo/chạm trên khung ngắm để chỉ chủ thể
+  let dragging = false;
+  const stagePt = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  stage.addEventListener('pointerdown', (e) => {
+    if (!st.assist || e.target.closest('.assist')) return;
+    e.preventDefault(); dragging = true;
+    try { stage.setPointerCapture(e.pointerId); } catch (er) { /* pointer giả trong test */ }
+    setSubject(...stagePt(e)); updateAssist(); draw();
+  });
+  stage.addEventListener('pointermove', (e) => { if (dragging && st.assist) { setSubject(...stagePt(e)); draw(); } });
+  ['pointerup', 'pointercancel'].forEach((ev) => stage.addEventListener(ev, () => { if (dragging && st.assist) { dragging = false; lockOn(); } }));
+
+  // Bám chủ thể: so khớp mảng 17×17 điểm ảnh (trừ độ sáng trung bình) trên khung hình thu nhỏ 160px
+  const TW = 160, PR = 8, PN = PR * 2 + 1;
+  const tcv = document.createElement('canvas'), tctx = tcv.getContext('2d', { willReadFrequently: true });
+  function grab() {
+    const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return null;
+    const W = stage.clientWidth, H = stage.clientHeight, k = TW / W, h = Math.max(1, Math.round(H * k));
+    const sc = Math.max(W / vw, H / vh), sw = W / sc, sh = H / sc;
+    tcv.width = TW; tcv.height = h;
+    if (video.classList.contains('mirror')) { tctx.translate(TW, 0); tctx.scale(-1, 1); }
+    tctx.drawImage(video, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, TW, h);
+    tctx.setTransform(1, 0, 0, 1, 0, 0);
+    const d = tctx.getImageData(0, 0, TW, h).data, g = new Float32Array(TW * h);
+    for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+    return { g, w: TW, h, k };
+  }
+  function patchMean(f, x0, y0) {
+    let s = 0;
+    for (let j = 0; j < PN; j++) { const row = (y0 + j) * f.w + x0; for (let i = 0; i < PN; i++) s += f.g[row + i]; }
+    return s / (PN * PN);
+  }
+  function patchAt(f, p) {
+    const x0 = Math.round(p.x * f.k) - PR, y0 = Math.round(p.y * f.k) - PR;
+    if (x0 < 0 || y0 < 0 || x0 + PN > f.w || y0 + PN > f.h) return null;
+    const m = patchMean(f, x0, y0), t = new Float32Array(PN * PN); let s2 = 0;
+    for (let j = 0; j < PN; j++) for (let i = 0; i < PN; i++) { const v = f.g[(y0 + j) * f.w + x0 + i] - m; t[j * PN + i] = v; s2 += v * v; }
+    t.std = Math.sqrt(s2 / (PN * PN));
+    return t;
+  }
+  function trackPoint(f, p) {
+    const cx = Math.round(p.x * f.k), cy = Math.round(p.y * f.k), SR = p.lost ? 20 : 12;
+    let best = Infinity, bx = cx, by = cy;
+    for (let dy = -SR; dy <= SR; dy++) for (let dx = -SR; dx <= SR; dx++) {
+      const x0 = cx + dx - PR, y0 = cy + dy - PR;
+      if (x0 < 0 || y0 < 0 || x0 + PN > f.w || y0 + PN > f.h) continue;
+      const m = patchMean(f, x0, y0); let s = 0;
+      for (let j = 0; j < PN && s < best; j++) {
+        const row = (y0 + j) * f.w + x0, tr = j * PN;
+        for (let i = 0; i < PN; i++) s += Math.abs(f.g[row + i] - m - p.tpl[tr + i]);
+      }
+      if (s < best) { best = s; bx = cx + dx; by = cy + dy; }
+    }
+    const err = best / (PN * PN);
+    if (err > 22) { p.lost = true; return; }
+    p.lost = false; p.x = bx / f.k; p.y = by / f.k;
+    if (err < 10) { const nt = patchAt(f, p); if (nt) for (let i = 0; i < nt.length; i++) p.tpl[i] = p.tpl[i] * 0.85 + nt[i] * 0.15; }
+  }
+  setInterval(() => {
+    const a = st.assist;
+    if (!a || a.phase !== 'guide' || dragging || !$('cam').classList.contains('on') || !video.videoWidth || document.hidden) return;
+    const f = grab(); if (!f) return;
+    const tracked = a.pts.filter((p) => p.tpl);
+    tracked.forEach((p) => trackPoint(f, p));
+    a.lost = tracked.length > 0 && tracked.every((p) => p.lost);
+    updateAssist(); draw();
+  }, 90);
 
   // ---------- Chụp ----------
   // Vùng ảnh gốc (theo pixel của video) tương ứng với khung đang hiện trên màn
@@ -470,6 +732,7 @@
     const amt = ed.preset === 'orig' && !adjActive() ? 0 : ed.preset === 'orig' ? 1 : ed.amount;
     // preset "Gốc" + chỉnh tay: chỉnh tay luôn áp đủ; preset khác thì "Độ đậm" pha với ảnh gốc
     G.apply(ed.src, ed.out, currentParams(), amt);
+    if (canShareFiles && (!ready || ready.sig !== shareSig())) $('share').textContent = SHARE_TXT;
     pctx.putImageData(ed.comparing ? ed.src : ed.out, 0, 0);
     const p = presetById(ed.preset), sg = ed.sugg.find((s) => s.id === ed.preset);
     $('note').innerHTML = (sg ? `<b>Gợi ý:</b> ${sg.why}. ` : '') + (p.note || '');
@@ -566,18 +829,44 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     toast('Đã lưu ' + a.download);
   });
+  // Điện thoại/máy tính bảng: nút chính là bảng chia sẻ (có mục "Lưu hình ảnh" vào thư viện Ảnh).
+  // Nhận theo màn cảm ứng, không theo userAgent: iPad đời mới tự xưng là "Macintosh".
+  let canShareFiles = false;
   try {
     const probe = new File([new Blob(['x'], { type: 'image/jpeg' })], 'x.jpg', { type: 'image/jpeg' });
-    if (navigator.canShare && navigator.canShare({ files: [probe] }) && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) $('share').hidden = false;
+    canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [probe] }) && navigator.maxTouchPoints > 0);
   } catch (e) { /* trình duyệt không hỗ trợ chia sẻ file */ }
-  $('share').onclick = () => withBusy($('share'), 'Đang xuất…', async () => {
-    const blob = await exportBlob();
-    await navigator.share({ files: [new File([blob], fileName(), { type: 'image/jpeg' })] });
-  });
+  if (canShareFiles) {
+    $('share').hidden = false;
+    $('dl').className = 'secondary'; $('dl').textContent = 'Tải file';
+  }
+  // Safari chỉ mở bảng chia sẻ ngay sau cú chạm; xuất ảnh lớn mất 1–2 giây có thể làm mất "cú chạm" đó.
+  // Bị chặn thì giữ ảnh đã xuất và mời bấm lại — lần hai mở ngay, không phải chờ.
+  let ready = null;
+  const shareSig = () => JSON.stringify([ed.preset, ed.amount, ed.adj, $('withPal').checked, ed.full && ed.full.width]);
+  const SHARE_TXT = 'Lưu vào Ảnh';
+  $('share').onclick = async () => {
+    const btn = $('share');
+    if (!ready || ready.sig !== shareSig()) {
+      btn.disabled = true; btn.textContent = 'Đang xuất…';
+      await new Promise((r) => setTimeout(r, 30));
+      try { ready = { sig: shareSig(), blob: await exportBlob() }; }
+      catch (e) { toast('Lỗi khi xuất ảnh: ' + (e.message || e)); btn.disabled = false; btn.textContent = SHARE_TXT; return; }
+      btn.disabled = false;
+    }
+    try {
+      await navigator.share({ files: [new File([ready.blob], fileName(), { type: 'image/jpeg' })] });
+      btn.textContent = SHARE_TXT;
+    } catch (e) {
+      if (e.name === 'NotAllowedError') { btn.textContent = 'Ảnh đã sẵn sàng — chạm lần nữa'; return; }
+      btn.textContent = SHARE_TXT;
+      if (e.name !== 'AbortError') toast('Không mở được bảng chia sẻ: ' + (e.message || e.name));
+    }
+  };
 
   // ---------- Khởi động ----------
   st.landscape = stage.clientWidth > stage.clientHeight * 1.15;
-  renderGuideChips(); renderRatioChips(); showTip(); draw();
+  renderSceneChips(); renderGuideChips(); renderRatioChips(); showTip(); draw();
   startCamera();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;

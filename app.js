@@ -29,8 +29,18 @@
   const SCENES = [
     { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5],
       place: 'Chạm hoặc kéo chấm tròn lên MẮT người được chụp',
-      tip: 'Mắt nằm trên đường 1/3 phía trên, chừa khoảng trống về phía người đang nhìn. Đừng để mép khung cắt ngang cổ, khuỷu tay hay đầu gối.',
-      target: (R, o, p) => nearest(p, [[R.x + R.w / 3, R.y + R.h / 3], [R.x + R.w * 2 / 3, R.y + R.h / 3]]) },
+      tip: 'Khoe biểu cảm → Cận mặt · áo, phụ kiện → Bán thân · dáng, cả bộ đồ → Toàn thân · nơi đã đến → Trong cảnh. Nền sau rối thì chụp càng cận càng tốt.',
+      // [id, tên, độ cao của mắt trong khung, {tỉ lệ, mẹo riêng}]
+      opts: [
+        ['face', 'Cận mặt', 1 / 3, { ratio: [4, 5], tip: 'Cắt mất đỉnh tóc cũng được, nhưng đừng cắt cằm. Đứng lùi ra rồi zoom nếu máy có — dí máy sát mặt làm mũi to ra.' }],
+        ['half', 'Bán thân', 1 / 3, { ratio: [4, 5], tip: 'Mép dưới cắt giữa ngực hoặc ngang eo, đừng cắt ngang cổ hay khuỷu tay. Máy ngang tầm mắt người được chụp.' }],
+        // toàn thân: mắt cao hơn 1/3 để người chiếm gần hết chiều cao, không thừa trời trên đầu (cao hơn 0,25 thì bảng hướng dẫn che vòng đích)
+        ['full', 'Toàn thân', 0.25, { ratio: [2, 3], tip: 'Tiến/lùi cho tới khi bàn chân còn cách mép dưới một chút — đừng cắt mất chân. Hạ máy xuống ngang hông cho chân dài, đừng chụp chúc từ trên xuống.' }],
+        ['env', 'Trong cảnh', 1 / 3, { ratio: [2, 3], tip: 'Người nhỏ thôi, cảnh chiếm phần lớn khung. Người nhìn hoặc đi về phía khoảng trống, không nhìn ra mép ảnh.' }],
+      ],
+      target: (R, o, p) => nearest(p, o[0] === 'env'
+        ? [[1 / 3, 1 / 3], [2 / 3, 1 / 3], [1 / 3, 2 / 3], [2 / 3, 2 / 3]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v])
+        : [[R.x + R.w / 3, R.y + R.h * o[2]], [R.x + R.w * 2 / 3, R.y + R.h * o[2]]]) },
     { id: 'horizon', name: 'Chân trời', guide: 'thirds', ratio: [2, 3], line: true, level: true,
       place: 'Kéo vạch ngang cho trùng ĐƯỜNG CHÂN TRỜI (mép biển, dải núi, mép ruộng)',
       tip: 'Đừng đặt chân trời ngay giữa ảnh — trừ khi chụp phản chiếu mặt nước. Phần nào đẹp hơn thì cho phần đó 2/3 khung.',
@@ -426,7 +436,7 @@
   function startAssist(s) {
     if (s.level) enableLevel(true);
     st.guide = s.guide; st.variant = 0;
-    st.ratio = RATIOS.find((r) => r && r[0] === s.ratio[0] && r[1] === s.ratio[1]);
+    setRatio(s.opts && s.opts[0][3] ? s.opts[0][3].ratio : s.ratio);
     st.landscape = isLand(); // khung theo chiều máy đang cầm, mọi loại cảnh
     const R = cropRect();
     st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, pts: [], ok: false, lost: false };
@@ -434,6 +444,7 @@
     stage.style.touchAction = 'none';
     renderGuideChips(); renderRatioChips(); renderSceneChips(); showTip(); renderAssistOpts(); updateAssist(); draw();
   }
+  function setRatio(r) { st.ratio = RATIOS.find((x) => x && x[0] === r[0] && x[1] === r[1]); }
   function exitAssist() {
     st.assist = null; stage.style.touchAction = '';
     $('assist').hidden = true; renderSceneChips(); draw();
@@ -444,7 +455,11 @@
     (a.s.opts || []).forEach((o) => {
       const b = document.createElement('button');
       b.className = 'chip' + (a.opt === o ? ' on' : ''); b.textContent = o[1];
-      b.onclick = () => { a.opt = o; renderAssistOpts(); updateAssist(); draw(); };
+      b.onclick = () => {
+        a.opt = o;
+        if (o[3] && o[3].ratio) { setRatio(o[3].ratio); renderRatioChips(); }
+        renderAssistOpts(); updateAssist(); draw();
+      };
       box.appendChild(b);
     });
   }
@@ -503,7 +518,7 @@
     if ($('asStep').textContent !== step) $('asStep').textContent = step;
     if ($('asMsg').textContent !== msg) $('asMsg').textContent = msg;
     // mẹo chỉ hiện ở bước 1 — bước 2 thu gọn để không che mục tiêu ở 1/3 phía trên
-    const tip = a.phase === 'place' ? a.s.tip : '';
+    const tip = a.phase === 'place' ? [a.s.tip, a.opt && a.opt[3] && a.opt[3].tip].filter(Boolean).join('\n') : '';
     if ($('asTip').textContent !== tip) $('asTip').textContent = tip;
   }
   function arrow(ctx, x1, y1, x2, y2, col) {

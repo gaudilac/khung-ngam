@@ -93,6 +93,17 @@
 
   const stage = $('stage'), video = $('video'), ov = $('overlay'), octx = ov.getContext('2d');
 
+  // Chống kẹt phóng to: iPhone bỏ qua user-scalable=no nên chặn cử chỉ chụm (gesturestart, chỉ Safari có)
+  // khi trang chưa phóng to. Đã lỡ phóng to thì thả cho chụm thu nhỏ — kể cả trên khung ngắm đang kéo chấm.
+  const zoomed = () => !!window.visualViewport && visualViewport.scale > 1.02;
+  document.addEventListener('gesturestart', (e) => { if (!zoomed()) e.preventDefault(); }, { passive: false });
+  function syncTouch() { stage.style.touchAction = st.assist && !zoomed() ? 'none' : ''; }
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => {
+    const z = zoomed(); syncTouch();
+    if (z && !syncTouch.warned) toast('Màn hình đang bị phóng to — chụm hai ngón lại để thu nhỏ');
+    syncTouch.warned = z;
+  });
+
   function toast(msg) {
     const t = $('toast'); t.textContent = msg; t.classList.add('on');
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1800);
@@ -459,12 +470,12 @@
     const R = cropRect();
     st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, dir: null, pts: [], ok: false, lost: false };
     setSubject(R.x + R.w / 2, R.y + R.h / 2);
-    stage.style.touchAction = 'none';
+    syncTouch();
     renderGuideChips(); renderRatioChips(); renderSceneChips(); showTip(); renderAssistOpts(); updateAssist(); draw();
   }
   function setRatio(r) { st.ratio = RATIOS.find((x) => x && x[0] === r[0] && x[1] === r[1]); }
   function exitAssist() {
-    st.assist = null; stage.style.touchAction = '';
+    st.assist = null; syncTouch();
     $('assist').hidden = true; renderSceneChips(); draw();
   }
   $('asClose').onclick = exitAssist;

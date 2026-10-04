@@ -152,6 +152,18 @@ function makeVideo(file) {
   await p.screenshot({ path: OUT + '/a4a-chan-troi-cat-dau.png' });
   console.log('nguoi+bien', JSON.stringify(tk), JSON.stringify(cat));
   assert(tk.length === 2 && /cắt ngang đầu/.test(cat.msg), 'chân trời cắt ngang đầu mà không nhắc: ' + JSON.stringify(cat));
+  // chụp lúc đang chọn Người + Biển: bối cảnh phải tới màn chỉnh màu — chủ thể, chân trời, ô mặt đúng chỗ đã đặt (giữa khung)
+  const mat = await p.evaluate(() => { const a = KN.st.assist, R = KN.crop(), q = a.pts[0]; return { u: (q.x - R.x) / R.w, v: (q.y - R.y) / R.h }; });
+  await p.click('#shutter');
+  await p.waitForFunction(() => document.getElementById('edit').classList.contains('on')); await sleep(300);
+  const ctx = await p.evaluate(() => KN.shot()), gn = await p.evaluate(() => note.textContent);
+  await p.screenshot({ path: OUT + '/a3c-goi-y-gam-nguoi-bien.png' });
+  console.log('boi canh chup', JSON.stringify(mat), JSON.stringify(ctx), gn);
+  const bc = ctx && ctx.box && { u: ctx.box.x + ctx.box.w / 2, v: ctx.box.y + ctx.box.h / 2 };
+  assert(bc && ctx.main === 'person' && ctx.hz === true && Math.abs(bc.u - mat.u) < 0.02 && Math.abs(bc.v - mat.v) < 0.02 && ctx.box.w > 0.05,
+    'bối cảnh lúc chụp không tới màn chỉnh màu: ' + JSON.stringify(ctx));
+  assert(/^Ánh sáng: /.test(gn), 'thiếu dòng đọc ánh sáng: ' + gn);
+  await p.click('#back'); await sleep(200);
   await p.click('#asClose');
 
   // 3b) Hướng nhìn/đi + Đường dẫn + cỡ Đồ vật — đích tính theo phần khung (u ngang, v dọc)

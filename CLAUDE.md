@@ -83,4 +83,5 @@ Thêm vào `PRESETS` (`id`, `name`, `note`, `p`) + một dòng chấm điểm tr
 - **Safari iOS từ chối canvas quá ~16 MP** → ảnh chọn từ thư viện bị thu về 4096 cạnh dài.
 - **puppeteer `setViewport` đổi `isMobile` là trang TẢI LẠI** — ảnh chụp "desktop" sau đó thực ra là màn camera mới mở. Muốn test khổ khác thì mở trang mới.
 - Nút "Lưu vào Ảnh / Chia sẻ" chỉ hiện trên điện thoại: máy tính cũng báo `canShare` nhưng bảng chia sẻ của macOS/Windows không lưu vào thư viện ảnh.
+- **User kẹt ở trạng thái phóng to trang** (2026-10-04): chạm đúp vào nút làm Safari phóng to, mà khung ngắm ở chế độ "Chụp gì?" đặt `touch-action: none` nên chụm thu nhỏ không được. Giờ `*` có `touch-action: manipulation` (không kế thừa, và bị ngắt ở hàng cuộn ngang — đặt ở body là KHÔNG đủ), viewport `maximum-scale=1` (Chrome tôn trọng, iPhone bỏ qua), `gesturestart` chặn chụm khi chưa phóng to. Đã lỡ phóng to thì `syncTouch()` thả khung ngắm cho chụm + toast nhắc. Đổi `touch-action` của khung ngắm thì gọi `syncTouch()`, đừng gán thẳng. Test giả `visualViewport.scale` vì Chrome có `maximum-scale=1` thì không cho phóng thật.
 - macOS không có lệnh `timeout` — đừng bọc lệnh test bằng nó.

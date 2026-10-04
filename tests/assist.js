@@ -139,6 +139,17 @@ function makeVideo(file) {
   assert(Math.abs(d4.u - 0.5) < 0.02 && Math.abs(d4.v - 0.5) < 0.02, 'Lấp đầy phải đặt vật ở tâm');
   const g3 = (x) => Math.abs(x - 1 / 3) < 0.02 || Math.abs(x - 2 / 3) < 0.02;
   assert(g3(d5.u) && g3(d5.v) && d5.guide === 'thirds', 'Tối giản phải đặt vật ở một giao điểm 1/3 và vẽ lưới một phần ba');
+  // 3c) Kẹt phóng to: chạm đúp không phóng to trang; lỡ phóng to thì khung ngắm phải thả cho chụm thu nhỏ + nhắc
+  const tz = () => p.evaluate(() => ({ stage: stage.style.touchAction, chip: getComputedStyle(document.querySelector('.chip')).touchAction, scale: visualViewport.scale, toast: document.getElementById('toast').textContent }));
+  const z0 = await tz();
+  // maximum-scale=1 khiến Chrome không cho phóng to thật → giả độ phóng (iPhone vẫn phóng được dù có thẻ đó)
+  const gia = (k) => p.evaluate((k) => { Object.defineProperty(visualViewport, 'scale', { configurable: true, get: () => k }); visualViewport.dispatchEvent(new Event('resize')); }, k);
+  await gia(2); await sleep(100); const z1 = await tz();
+  await gia(1); await sleep(100); const z2 = await tz();
+  console.log('phong to', JSON.stringify(z0), JSON.stringify(z1), JSON.stringify(z2));
+  assert(z0.chip === 'manipulation' && z0.stage === 'none', 'nút phải chặn chạm đúp phóng to, khung ngắm chặn cử chỉ khi kéo chấm');
+  assert(z1.scale > 1.5 && z1.stage === '' && /phóng to/.test(z1.toast), 'đang phóng to mà khung ngắm vẫn chặn chụm thu nhỏ / không nhắc');
+  assert(z2.stage === 'none', 'thu nhỏ xong phải chặn cử chỉ lại để kéo chấm');
   await p.click('#asClose');
   assert(await p.evaluate(() => KN.st.assist === null && document.getElementById('assist').hidden), 'nút ✕ không thoát hướng dẫn');
 

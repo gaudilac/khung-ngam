@@ -209,6 +209,35 @@ function makeVideo(file) {
   await p.click('#asClose');
   assert(await p.evaluate(() => KN.st.assist === null && document.getElementById('assist').hidden), 'nút ✕ không thoát hướng dẫn');
 
+  // 3c) Bảng hướng dẫn che chủ thể: nút – thu gọn (còn câu chỉ hướng + nút kéo vào khung), kéo thanh tiêu đề dời bảng
+  await chip('#scenes .chip', 'Người'); await sleep(150);
+  const bang = () => p.evaluate(() => { const r = assist.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    return { top: r.top - s.top, bottom: r.bottom - s.top, h: r.height, stageH: s.height, tip: getComputedStyle(asTip).display, opts: getComputedStyle(asOpts).display,
+      tok: asTok.offsetHeight > 0, msg: asMsg.offsetHeight > 0, mini: assist.classList.contains('mini'), dock: assist.classList.contains('dock') }; });
+  const b0 = await bang();
+  await p.click('#asMin'); await sleep(120);
+  const b1 = await bang(), saved = await p.evaluate(() => localStorage.getItem('kn-asMini'));
+  await p.screenshot({ path: OUT + '/a3d-bang-thu-gon.png' });
+  // kéo thanh tiêu đề lên đầu khung (bảng đang ở đáy vì chưa đặt chủ thể)
+  const hd = await p.evaluate(() => { const r = assist.querySelector('.h').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; });
+  await p.touchscreen.touchStart(hd.x, hd.y); await p.touchscreen.touchMove(hd.x, hd.y - 100); await p.touchscreen.touchMove(hd.x, stageBox.y + 30); await p.touchscreen.touchEnd();
+  await sleep(500); // vài khung hình updateAssist: bảng phải đứng yên chỗ đã kéo, không tự né về đáy
+  const b2 = await bang();
+  await p.screenshot({ path: OUT + '/a3e-bang-keo-len.png' });
+  // kéo quá mép dưới: bảng vẫn nằm trọn trong khung ngắm
+  const hd2 = await p.evaluate(() => { const r = assist.querySelector('.h').getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 }; });
+  await p.touchscreen.touchStart(hd2.x, hd2.y); await p.touchscreen.touchMove(hd2.x, hd2.y + 50); await p.touchscreen.touchMove(hd2.x, stageBox.y + stageBox.h + 300); await p.touchscreen.touchEnd(); await sleep(200);
+  const b3 = await bang();
+  await p.click('#asMin'); await sleep(120);
+  const b4 = await bang();
+  console.log('bang', JSON.stringify({ b0, b1, saved, b2, b3, b4 }));
+  assert(b0.tip !== 'none' && b1.mini && b1.tip === 'none' && b1.opts === 'none' && b1.tok && b1.msg && b1.h < b0.h * 0.75 && saved === '1',
+    'thu gọn phải ẩn mẹo + lựa chọn, giữ câu chỉ hướng và nút kéo, nhớ cho lần sau');
+  assert(b1.dock && b2.top < 40 && Math.abs(b2.h - b1.h) < 2, 'kéo thanh tiêu đề phải dời bảng lên đầu khung và giữ nguyên ở đó: ' + JSON.stringify(b2));
+  assert(b3.bottom <= b3.stageH + 1 && b3.top >= 0, 'kéo quá mép thì bảng vẫn phải nằm trong khung ngắm');
+  assert(!b4.mini && b4.tip !== 'none', 'bấm + phải mở lại đầy đủ');
+  await p.click('#asClose'); await p.evaluate(() => { KN.st.asPos = null; });
+
   // 4) Toàn màn hình: khung ngắm phủ cả màn, khung tỉ lệ né hai thanh nổi
   await p.click('#fullBtn'); await sleep(300);
   const f = await p.evaluate(() => {

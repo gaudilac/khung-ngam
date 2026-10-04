@@ -24,12 +24,12 @@
   // [rộng, cao] theo chiều dọc; null = cả khung ngắm
   const RATIOS = [[2, 3], [4, 5], [3, 4], [1, 1], [9, 16], null];
 
-  // "Chụp gì?" — người mới chọn loại cảnh, app tự chọn khung + tỉ lệ rồi chỉ chỗ đặt chủ thể.
+  // Cảnh = quy tắc bố cục cho một loại chủ thể: khung + tỉ lệ + điểm đích. Người dùng không chọn cảnh trực tiếp mà chọn
+  // thứ có trong khung (ITEMS), mỗi thứ trỏ tới một cảnh.
   // target(R, opt): điểm/đường cần đưa chủ thể tới, trong toạ độ khung ngắm (null = trục đó không quan trọng).
   const SCENES = [
-    { id: 'person', name: 'Người', guide: 'thirds', ratio: [4, 5], dir: true,
-      place: 'Chạm hoặc kéo chấm tròn lên MẮT người được chụp',
-      tip: 'Khoe biểu cảm → Cận mặt · áo, phụ kiện → Bán thân · dáng, cả bộ đồ → Toàn thân · nơi đã đến → Trong cảnh. Nền sau rối thì chụp càng cận càng tốt. Viền người ở bước 2 là dáng đứng — ngồi hay tạo dáng thì chỉ dùng để ước cỡ.',
+    { id: 'person', guide: 'thirds', ratio: [4, 5], dir: true,
+      tip: 'Khoe biểu cảm → Cận mặt · áo, phụ kiện → Bán thân · dáng, cả bộ đồ → Toàn thân · nơi đã đến → Trong cảnh. Nền sau rối thì chụp càng cận càng tốt. Viền người khi căn khung là dáng đứng — ngồi hay tạo dáng thì chỉ dùng để ước cỡ.',
       fit: 'tiến/lùi cho người vừa khít viền',
       // [id, tên, độ cao của mắt trong khung, {tỉ lệ, mẹo riêng, body = cỡ đầu so với chiều cao khung}]
       opts: [
@@ -42,17 +42,14 @@
       target: (R, o, p) => nearest(p, facing(R, o[0] === 'env'
         ? [[1 / 3, 1 / 3], [2 / 3, 1 / 3], [1 / 3, 2 / 3], [2 / 3, 2 / 3]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v])
         : [[R.x + R.w / 3, R.y + R.h * o[2]], [R.x + R.w * 2 / 3, R.y + R.h * o[2]]])) },
-    { id: 'horizon', name: 'Chân trời', guide: 'thirds', ratio: [2, 3], line: true, level: true,
-      place: 'Kéo vạch ngang cho trùng ĐƯỜNG CHÂN TRỜI (mép biển, dải núi, mép ruộng)',
+    { id: 'horizon', guide: 'thirds', ratio: [2, 3], line: true, level: true,
       tip: 'Đừng đặt chân trời ngay giữa ảnh — trừ khi chụp phản chiếu mặt nước. Phần nào đẹp hơn thì cho phần đó 2/3 khung. Thêm tiền cảnh (tảng đá, khóm hoa, hàng rào) ở 1/3 dưới và hạ máy thấp — ảnh có chiều sâu hẳn.',
       opts: [['sky', 'Trời đẹp', 2 / 3], ['ground', 'Cảnh dưới đẹp', 1 / 3], ['mirror', 'Phản chiếu nước', 1 / 2]],
       target: (R, o) => ({ x: null, y: R.y + R.h * o[2] }) },
-    { id: 'arch', name: 'Kiến trúc', guide: 'center', ratio: [4, 5], level: true,
-      place: 'Chạm vào TRỤC GIỮA công trình (cửa chính, đỉnh mái, tháp)',
+    { id: 'arch', guide: 'center', ratio: [4, 5], level: true,
       tip: 'Đứng đúng trục giữa và giữ máy thẳng đứng — ngửa máy lên làm các cột chụm vào nhau. Thiếu chỗ thì lùi xa ra, đừng ngửa máy.',
       target: (R) => ({ x: R.x + R.w / 2, y: null }) },
-    { id: 'object', name: 'Đồ vật', guide: 'phi', ratio: [1, 1],
-      place: 'Chạm lên CHỦ THỂ (món ăn, bông hoa, sản phẩm)',
+    { id: 'object', guide: 'phi', ratio: [1, 1],
       tip: 'Món ăn đẹp nhất khi chụp thẳng từ trên xuống hoặc nghiêng 45°.',
       fit: 'tiến/lùi cho vật vừa ô',
       // [id, tên, chỗ đặt, {khung vẽ theo chỗ đặt, box = cạnh ô so với cạnh ngắn của khung}]
@@ -63,14 +60,27 @@
       ],
       target: (R, o, p) => o[2] === 'center' ? { x: R.x + R.w / 2, y: R.y + R.h / 2 }
         : nearest(p, o[2] === 'phi' ? PHI_PTS(R) : [[1 / 3, 1 / 3], [2 / 3, 1 / 3], [1 / 3, 2 / 3], [2 / 3, 2 / 3]].map(([u, v]) => [R.x + R.w * u, R.y + R.h * v])) },
-    { id: 'wide', name: 'Cảnh rộng', guide: 'spiral', ratio: [2, 3], dir: true,
-      place: 'Chạm lên ĐIỂM NHẤN nhỏ trong cảnh (một người, con thuyền, cái cây đơn độc)',
+    { id: 'wide', guide: 'spiral', ratio: [2, 3], dir: true,
       tip: 'Điểm nhấn nằm ở tâm xoắn, phần còn lại của cảnh dẫn mắt về đó. Chủ thể đang đi về phía nào thì chọn hướng bên dưới để chừa khoảng trống phía trước. Có tiền cảnh (đá, cành cây) ở góc dưới thì ảnh sâu hơn.',
       target: (R) => { const e = spiralMap(R, st.variant)(SPIRAL.eye); return { x: e[0], y: e[1] }; } },
-    { id: 'lead', name: 'Đường dẫn', guide: 'thirds', ratio: [2, 3],
-      place: 'Chạm vào ĐIỂM CUỐI của đường — chỗ con đường, ray tàu, bờ sông mất hút',
+    { id: 'lead', guide: 'thirds', ratio: [2, 3],
       tip: 'Đường đi vào từ mép dưới và kéo mắt người xem tới điểm cuối nằm ở 1/3 phía trên. Đường cong chữ S hấp dẫn hơn đường thẳng; có người hay vật ở cuối đường thì càng tốt.',
       target: (R, o, p) => nearest(p, [[R.x + R.w / 3, R.y + R.h / 3], [R.x + R.w * 2 / 3, R.y + R.h / 3]]) },
+  ];
+  const SC = Object.fromEntries(SCENES.map((s) => [s.id, s]));
+  // "Trong khung có:" — người mới chọn thứ có trong khung rồi kéo nút vào đúng chỗ.
+  // kind: box = kéo góc ô cho vừa vật (biết cỡ → chỉ tiến/lùi), point = một điểm, line = vạch ngang (chọn kèm chủ thể được)
+  const ITEMS = [
+    { id: 'person', name: 'Người', scene: 'person', kind: 'box', face: true, noun: 'khuôn mặt', place: 'lên MẶT người được chụp' },
+    { id: 'animal', name: 'Con vật', scene: 'object', kind: 'box', noun: 'con vật', place: 'lên con vật',
+      tip: 'Hạ máy xuống ngang tầm mắt con vật; nó nhìn về đâu thì chừa khoảng trống phía đó.' },
+    { id: 'thing', name: 'Đồ vật, món ăn', scene: 'object', kind: 'box', noun: 'món đồ', place: 'lên món đồ / món ăn' },
+    { id: 'flower', name: 'Hoa, cây', scene: 'object', kind: 'box', noun: 'hoa, cây', place: 'lên bông hoa / cái cây',
+      tip: 'Tiến sát, chọn góc có nền xa và trơn (trời, tán lá tối) cho hoa nổi lên.' },
+    { id: 'house', name: 'Nhà, công trình', scene: 'arch', kind: 'box', noun: 'công trình', place: 'lên TRỤC GIỮA công trình (cửa chính, đỉnh mái, tháp)' },
+    { id: 'road', name: 'Con đường', scene: 'lead', kind: 'point', place: 'lên ĐIỂM CUỐI của đường — chỗ con đường, ray tàu, bờ sông mất hút' },
+    { id: 'accent', name: 'Điểm nhấn nhỏ', scene: 'wide', kind: 'point', place: 'lên điểm nhấn nhỏ trong cảnh rộng (một người, con thuyền, cái cây đơn độc)' },
+    { id: 'horizon', name: 'Biển, núi', scene: 'horizon', kind: 'line', place: 'lên ĐƯỜNG CHÂN TRỜI (mép biển, dải núi, mép ruộng)' },
   ];
   // chủ thể nhìn/đi sang trái thì đặt nó lệch phải để chừa khoảng trống phía trước, và ngược lại
   function facing(R, pts) {
@@ -169,7 +179,7 @@
     const land = isLand();
     if (land !== lastLand) {
       lastLand = land; st.landscape = land; renderRatioChips();
-      if (st.assist) startAssist(st.assist.s);
+      if (st.assist) startAssist(st.assist.main, st.assist.hz);
     }
     draw();
   }
@@ -451,34 +461,48 @@
     requestAnimationFrame(draw);
   };
 
-  // ---------- "Chụp gì?": đặt chủ thể → app chỉ chỗ → bám theo chủ thể ----------
-  function renderSceneChips() {
-    const box = $('scenes'); box.innerHTML = '';
-    SCENES.forEach((s) => {
+  // ---------- "Trong khung có:": chọn thứ có trong khung → kéo nút vào đúng chỗ → app chỉ tiến/lùi + căn khung ----------
+  function renderItemChips() {
+    const box = $('scenes'), a = st.assist; box.innerHTML = '';
+    ITEMS.forEach((it) => {
       const b = document.createElement('button');
-      b.className = 'chip scene' + (st.assist && st.assist.s === s ? ' on' : '');
-      b.textContent = s.name;
-      b.onclick = () => (st.assist && st.assist.s === s ? exitAssist() : startAssist(s));
+      b.className = 'chip scene' + (a && (a.main === it || a.hz === it) ? ' on' : '');
+      b.textContent = it.name;
+      b.onclick = () => toggleItem(it);
       box.appendChild(b);
     });
   }
-  function startAssist(s) {
-    if (s.level) enableLevel(true);
+  // một chủ thể chính + tuỳ chọn một đường chân trời; chọn chủ thể khác thì thay chủ thể cũ
+  function toggleItem(it) {
+    const a = st.assist;
+    if (it.kind === 'line' && a && a.main) {
+      // bật/tắt chân trời kèm chủ thể: giữ nguyên chủ thể đã đặt
+      a.hz = a.hz === it ? null : it; a.hzPts = []; delete a.placed[it.id];
+      if (a.hz) { enableLevel(true); a.phase = 'place'; }
+      renderItemChips(); renderAssistOpts(); updateAssist(); draw(); return;
+    }
+    let main = a ? a.main : null, hz = a ? a.hz : null;
+    if (it.kind === 'line') hz = hz === it ? null : it; else main = main === it ? null : it;
+    if (!main && !hz) return exitAssist();
+    startAssist(main, hz);
+  }
+  function startAssist(main, hz) {
+    const s = SC[main ? main.scene : 'horizon'];
+    if (s.level || hz) enableLevel(true);
     st.guide = s.guide; st.variant = 0;
     setRatio((s.opts && s.opts[0][3] && s.opts[0][3].ratio) || s.ratio);
     st.landscape = isLand(); // khung theo chiều máy đang cầm, mọi loại cảnh
-    const R = cropRect();
-    st.assist = { s, phase: 'place', opt: s.opts ? s.opts[0] : null, dir: null, pts: [], ok: false, lost: false };
-    setSubject(R.x + R.w / 2, R.y + R.h / 2);
+    st.assist = { s, main, hz, phase: 'place', opt: s.opts ? s.opts[0] : null, dir: null, pts: [], hzPts: [], box: null, placed: {}, ok: false, lost: false };
     syncTouch();
-    renderGuideChips(); renderRatioChips(); renderSceneChips(); showTip(); renderAssistOpts(); updateAssist(); draw();
+    renderGuideChips(); renderRatioChips(); renderItemChips(); showTip(); renderAssistOpts(); updateAssist(); draw();
   }
   function setRatio(r) { st.ratio = RATIOS.find((x) => x && x[0] === r[0] && x[1] === r[1]); }
   function exitAssist() {
     st.assist = null; syncTouch();
-    $('assist').hidden = true; renderSceneChips(); draw();
+    $('assist').hidden = true; renderItemChips(); draw();
   }
   $('asClose').onclick = exitAssist;
+  const picked = (a) => [a.main, a.hz].filter(Boolean);
   function renderAssistOpts() {
     const a = st.assist, box = $('asOpts'); box.innerHTML = '';
     (a.s.opts || []).forEach((o) => {
@@ -493,7 +517,7 @@
       };
       box.appendChild(b);
     });
-    // hướng nhìn/đi chỉ chọn ở bước 1 — thêm hàng ở bước 2 thì bảng cao lên, che vòng đích
+    // hướng nhìn/đi chỉ chọn ở bước 1 — thêm hàng ở bước sau thì bảng cao lên, che vòng đích
     const dbox = $('asDir'); dbox.innerHTML = '';
     if (a.s.dir && a.phase === 'place') [['L', '← Nhìn/đi sang trái'], ['R', 'Nhìn/đi sang phải →']].forEach(([d, t]) => {
       const b = document.createElement('button');
@@ -501,6 +525,55 @@
       b.onclick = () => { a.dir = a.dir === d ? null : d; renderAssistOpts(); };
       dbox.appendChild(b);
     });
+    // nút vật để kéo vào khung; chạm (không kéo) thì đặt giữa khung
+    const tb = $('asTok'); tb.innerHTML = '';
+    if (a.phase === 'place') picked(a).forEach((it) => {
+      const b = document.createElement('button');
+      b.className = 'chip tok' + (a.placed[it.id] ? ' on' : ''); b.textContent = (a.placed[it.id] ? '✓ ' : '✥ ') + it.name;
+      let tk = null;
+      b.onpointerdown = (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (er) { /* pointer giả */ } tk = { x: e.clientX, y: e.clientY, moved: false }; };
+      b.onpointermove = (e) => {
+        if (!tk) return;
+        if (Math.hypot(e.clientX - tk.x, e.clientY - tk.y) > 8 && !tk.moved) { tk.moved = true; $('assist').classList.add('ghost'); }
+        const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+        if (tk.moved && x >= 0 && y >= 0 && x <= r.width && y <= r.height) { placeItem(it, x, y); updateAssist(); draw(); }
+      };
+      b.onpointerup = b.onpointercancel = () => {
+        if (!tk) return;
+        if (!tk.moved) { const R = cropRect(); placeItem(it, R.x + R.w / 2, R.y + R.h / 2); }
+        tk = null; $('assist').classList.remove('ghost'); renderAssistOpts(); updateAssist(); draw();
+      };
+      tb.appendChild(b);
+    });
+    const go = $('asGo');
+    go.hidden = a.phase === 'guide';
+    go.textContent = a.phase === 'place' ? 'Xong — hướng dẫn tôi' : 'Tiếp';
+    go.disabled = a.phase === 'place' && picked(a).some((it) => !a.placed[it.id]);
+  }
+  $('asGo').onclick = () => {
+    const a = st.assist;
+    if (a.phase === 'place') {
+      lockOn(); a.k = distK(a);
+      a.phase = a.k && (a.k > 1.2 || a.k < 0.83) ? 'dist' : 'guide';
+    } else a.phase = 'guide';
+    renderAssistOpts(); updateAssist(); draw();
+  };
+  function placeItem(it, x, y) {
+    const a = st.assist, R = cropRect();
+    if (it.kind === 'line' && a.main) a.hzPts = [{ x: R.x + R.w * 0.3, y }, { x: R.x + R.w * 0.7, y }];
+    else {
+      setSubject(x, y);
+      if (it.kind === 'box' && !a.box) { const d = it.face ? 0.14 * R.h : 0.25 * Math.min(R.w, R.h); a.box = { w: d, h: d }; }
+    }
+    a.placed[it.id] = true;
+  }
+  // tỉ lệ cỡ đích / cỡ hiện tại của ô người dùng kéo: > 1 là phải tiến lại, < 1 là phải lùi ra
+  function distK(a) {
+    if (!a.box) return null;
+    const R = cropRect(), o = a.opt && a.opt[3];
+    if (a.main.face) return (1.06 * o.body * R.h) / a.box.h; // ô ôm khuôn mặt = chiều cao đầu của viền
+    if (a.s.id === 'arch') return Math.min(0.8 * R.w / a.box.w, 0.9 * R.h / a.box.h);
+    return o.box * Math.min(R.w, R.h) / Math.max(a.box.w, a.box.h);
   }
   function setSubject(x, y) {
     const a = st.assist, R = cropRect();
@@ -508,13 +581,14 @@
     a.pts = a.s.line ? [{ x: R.x + R.w * 0.3, y }, { x: R.x + R.w * 0.7, y }] : [{ x, y }];
     a.lost = false;
   }
-  function subjectPoint(a) {
-    const live = a.pts.filter((p) => !p.lost), ps = live.length ? live : a.pts;
+  const avgPt = (pts) => {
+    const live = pts.filter((p) => !p.lost), ps = live.length ? live : pts;
     return { x: ps.reduce((s, p) => s + p.x, 0) / ps.length, y: ps.reduce((s, p) => s + p.y, 0) / ps.length };
-  }
+  };
+  const subjectPoint = (a) => avgPt(a.pts);
   function lockOn() {
     const a = st.assist, f = grab();
-    a.pts.forEach((p) => (p.tpl = f ? patchAt(f, p) : null));
+    a.pts.concat(a.hzPts).forEach((p) => (p.tpl = f ? patchAt(f, p) : null));
     a.lowTex = a.pts.every((p) => !p.tpl || p.tpl.std < 7);
     if (a.s.id === 'wide') {
       // chọn hướng xoắn có tâm gần chủ thể nhất — ít phải lia máy nhất
@@ -524,21 +598,30 @@
         if (d < bd && facing(R, [e]).length) { bd = d; st.variant = v; }
       }
     }
-    a.phase = 'guide'; renderAssistOpts(); updateAssist(); draw();
   }
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   function updateAssist() {
     const a = st.assist; if (!a) return;
     const box = $('assist'); box.hidden = false;
-    const R = cropRect();
+    const R = cropRect(), o = a.opt && a.opt[3];
     let msg, ok = false;
-    if (a.phase === 'place') msg = a.s.place;
-    else {
+    if (a.phase === 'place') {
+      const next = picked(a).find((it) => !a.placed[it.id]);
+      msg = next ? `Kéo nút "${next.name}" ${next.place}`
+        : a.box ? `Kéo chấm ở góc ô cho vừa ${a.main.noun}, rồi bấm "Xong"` : 'Chỉnh lại cho khớp, rồi bấm "Xong"';
+    } else if (a.phase === 'dist') {
+      a.p = subjectPoint(a);
+      msg = `${a.k > 1 ? 'Tiến lại gần' : 'Lùi ra xa'} cho tới khi ${a.main.face ? 'người vừa viền' : a.main.noun + ' vừa ô'}, rồi bấm "Tiếp"`;
+    } else {
       const p = subjectPoint(a), t = a.s.target(R, a.opt, p); a.t = t; a.p = p;
       const tol = Math.max(14, Math.min(R.w, R.h) * 0.045);
       const dx = t.x == null ? 0 : t.x - p.x, dy = t.y == null ? 0 : t.y - p.y;
       ok = !a.lost && Math.abs(dx) < tol && Math.abs(dy) < tol;
+      // chân trời cắt ngang đầu/cổ: chân trời luôn nằm ngang tầm máy, nên hạ máy thì nó tụt xuống thân người
+      const hy = a.main && a.main.face && a.hzPts.length ? avgPt(a.hzPts).y : null, hh = o && o.body ? o.body * R.h : 0;
+      const cut = hy != null && hy > p.y - 0.6 * hh && hy < p.y + hh;
       if (a.lost) msg = 'Mất dấu chủ thể — chạm lại vào chủ thể để bám tiếp';
+      else if (ok && cut) msg = 'Đúng chỗ — nhưng chân trời cắt ngang đầu: hạ thấp máy (ngồi xuống) cho nó tụt xuống ngang ngực';
       // đúng chỗ rồi mới nhắc canh cỡ — nói cùng lúc thì bảng dài thêm dòng, che mất vòng đích
       else if (ok) msg = a.s.fit ? 'Đúng chỗ rồi — ' + a.s.fit + ', rồi bấm chụp' : 'Chuẩn rồi — giữ yên máy và bấm chụp!';
       else if (video.classList.contains('mirror')) msg = 'Dịch máy để chấm đi theo mũi tên vào vòng vàng';
@@ -556,12 +639,17 @@
     if (ok && !a.ok && navigator.vibrate) navigator.vibrate(15);
     a.ok = ok;
     box.classList.toggle('ok', ok);
-    const step = a.phase === 'place' ? 'Bước 1/2 · Chỉ chủ thể' : 'Bước 2/2 · Căn khung';
-    if ($('asTitle').textContent !== a.s.name) $('asTitle').textContent = a.s.name;
+    // bước đặt vật: bảng né chủ thể (chưa đặt thì xuống đáy — mắt, điểm nhấn hay nằm 1/3 trên).
+    // Ngưỡng 40% chứ không 50%: chấm đổi cỡ nằm ở góc DƯỚI ô, chủ thể giữa khung thì bảng đáy che mất nó
+    const sp = a.pts.length ? subjectPoint(a) : null;
+    box.classList.toggle('dock', a.phase === 'place' && !(sp && sp.y > stage.clientHeight * 0.4));
+    const n = a.main && a.main.kind === 'box' ? 3 : 2, step = a.phase === 'place' ? `Bước 1/${n} · Đặt vật` : a.phase === 'dist' ? 'Bước 2/3 · Khoảng cách' : `Bước ${n}/${n} · Căn khung`;
+    const title = picked(a).map((it) => it.name).join(' + ');
+    if ($('asTitle').textContent !== title) $('asTitle').textContent = title;
     if ($('asStep').textContent !== step) $('asStep').textContent = step;
     if ($('asMsg').textContent !== msg) $('asMsg').textContent = msg;
-    // mẹo chỉ hiện ở bước 1 — bước 2 thu gọn để không che mục tiêu ở 1/3 phía trên
-    const tip = a.phase === 'place' ? [a.s.tip, a.opt && a.opt[3] && a.opt[3].tip].filter(Boolean).join('\n') : '';
+    // mẹo chỉ hiện lúc chưa đặt chủ thể chính — sau đó bảng thu gọn để chừa chỗ chỉnh ô, và không che vòng đích
+    const tip = a.phase === 'place' && !a.placed[picked(a)[0].id] ? [a.s.tip, a.main && a.main.tip, o && o.tip].filter(Boolean).join('\n') : '';
     if ($('asTip').textContent !== tip) $('asTip').textContent = tip;
   }
   function arrow(ctx, x1, y1, x2, y2, col) {
@@ -579,33 +667,40 @@
   const BODY = [[0.18, 0.48], [0.2, 0.75], [0.75, 0.9], [1, 1.15], [1.08, 1.6], [1.12, 2.6], [1.1, 3.8], [1.05, 4.1], [0.88, 4.1],
     [0.86, 3.7], [0.86, 2.6], [0.78, 1.75], [0.72, 2.6], [0.68, 3.1], [0.82, 3.9], [0.72, 5.2], [0.6, 6.6], [0.62, 7], [0.18, 7],
     [0.2, 6.6], [0.16, 5.2], [0.05, 4.1], [0, 4.05]];
-  // nét đứt đôi (viền tối + nét trắng mờ), cắt theo khung để thấy rõ mép ảnh cắt người ở đâu
-  function drawFit(ctx, R, a) {
-    const t = a.t, o = a.opt && a.opt[3];
-    if (!t || t.x == null || t.y == null || !(o && (o.body || o.box))) return;
+  // nét đứt đôi (viền tối + nét trắng mờ), cắt theo khung để thấy rõ mép ảnh cắt người ở đâu.
+  // c = chỗ đặt: vòng đích khi căn khung, chủ thể hiện tại khi canh khoảng cách
+  function drawFit(ctx, R, a, c) {
+    const o = a.opt && a.opt[3], arch = a.s.id === 'arch' && a.phase === 'dist';
+    if (!c || c.x == null || c.y == null || !(arch || (o && (o.body || o.box)))) return;
     ctx.save(); ctx.beginPath(); ctx.rect(R.x, R.y, R.w, R.h); ctx.clip(); ctx.beginPath();
-    if (o && o.body) {
-      const h = o.body * R.h, X = (u) => t.x + u * h, Y = (v) => t.y + v * h;
-      ctx.ellipse(t.x, Y(-0.03), 0.38 * h, 0.53 * h, 0, 0, Math.PI * 2);
+    if (arch) ctx.roundRect(c.x - 0.4 * R.w, c.y - 0.45 * R.h, 0.8 * R.w, 0.9 * R.h, 8);
+    else if (o.body) {
+      const h = o.body * R.h, X = (u) => c.x + u * h, Y = (v) => c.y + v * h;
+      ctx.ellipse(c.x, Y(-0.03), 0.38 * h, 0.53 * h, 0, 0, Math.PI * 2);
       ctx.moveTo(X(BODY[0][0]), Y(BODY[0][1]));
       BODY.forEach(([u, v]) => ctx.lineTo(X(u), Y(v)));
       BODY.slice().reverse().forEach(([u, v]) => ctx.lineTo(X(-u), Y(v)));
     } else {
       const d = o.box * Math.min(R.w, R.h);
-      ctx.roundRect(t.x - d / 2, t.y - d / 2, d, d, d * 0.08);
+      ctx.roundRect(c.x - d / 2, c.y - d / 2, d, d, d * 0.08);
     }
     ctx.lineJoin = 'round'; ctx.setLineDash([7, 6]);
     ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 4; ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.6; ctx.stroke();
     ctx.restore();
   }
+  function hline(ctx, R, y) {
+    ctx.beginPath(); ctx.moveTo(R.x, y); ctx.lineTo(R.x + R.w, y);
+    ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+  }
   function drawAssist(ctx, R) {
     const a = st.assist; if (!a) return;
-    const col = a.ok ? '#6fd08c' : '#e9b44c', p = subjectPoint(a);
+    const col = a.ok ? '#6fd08c' : '#e9b44c', p = a.pts.length ? subjectPoint(a) : null;
     ctx.save();
-    if (a.phase === 'guide' && a.t) {
+    if (a.phase === 'dist' && p) drawFit(ctx, R, a, p);
+    if (a.phase === 'guide' && a.t && p) {
       const t = a.t;
-      drawFit(ctx, R, a);
+      drawFit(ctx, R, a, t);
       ctx.setLineDash([8, 6]); ctx.strokeStyle = col; ctx.lineWidth = 2;
       if (t.x == null) { ctx.beginPath(); ctx.moveTo(R.x, t.y); ctx.lineTo(R.x + R.w, t.y); ctx.stroke(); }
       else if (t.y == null) { ctx.beginPath(); ctx.moveTo(t.x, R.y); ctx.lineTo(t.x, R.y + R.h); ctx.stroke(); }
@@ -617,27 +712,53 @@
       if (!a.ok && !a.lost) arrow(ctx, p.x, p.y, t.x == null ? p.x : t.x, t.y == null ? p.y : t.y, col);
     }
     ctx.globalAlpha = a.lost ? 0.45 : 1;
-    if (a.s.line) {
-      ctx.beginPath(); ctx.moveTo(R.x, p.y); ctx.lineTo(R.x + R.w, p.y);
+    if (a.hzPts.length) hline(ctx, R, avgPt(a.hzPts).y);
+    if (p) {
+      if (a.s.line) hline(ctx, R, p.y);
+      // ô người dùng kéo cho vừa vật + chấm ở góc để đổi cỡ (chỉ ở bước đặt vật)
+      if (a.box && a.phase === 'place') {
+        ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 4; ctx.strokeRect(p.x - a.box.w / 2, p.y - a.box.h / 2, a.box.w, a.box.h);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(p.x - a.box.w / 2, p.y - a.box.h / 2, a.box.w, a.box.h);
+        ctx.beginPath(); ctx.arc(p.x + a.box.w / 2, p.y + a.box.h / 2, 11, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 3; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
     }
-    ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
     ctx.restore();
   }
-  // kéo/chạm trên khung ngắm để chỉ chủ thể
-  let dragging = false;
+  // kéo/chạm trên khung ngắm: góc ô (đổi cỡ) → vạch chân trời phụ → chủ thể chính
+  let drag = null;
   const stagePt = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   stage.addEventListener('pointerdown', (e) => {
-    if (!st.assist || e.target.closest('.assist')) return;
-    e.preventDefault(); dragging = true;
+    const a = st.assist;
+    if (!a || e.target.closest('.assist')) return;
+    e.preventDefault();
     try { stage.setPointerCapture(e.pointerId); } catch (er) { /* pointer giả trong test */ }
-    setSubject(...stagePt(e)); updateAssist(); draw();
+    const [x, y] = stagePt(e), p = a.pts.length ? subjectPoint(a) : null;
+    const inBox = a.phase === 'place' && p && a.box && Math.abs(x - p.x) < a.box.w / 2 && Math.abs(y - p.y) < a.box.h / 2;
+    if (a.phase === 'place' && a.box && p && Math.hypot(x - p.x - a.box.w / 2, y - p.y - a.box.h / 2) < 28) drag = 'size';
+    else if (a.hzPts.length && Math.abs(y - avgPt(a.hzPts).y) < 24 && !inBox) drag = 'hz';
+    else drag = 'main';
+    if (a.phase === 'place') $('assist').classList.add('ghost');
+    dragTo(x, y);
   });
-  stage.addEventListener('pointermove', (e) => { if (dragging && st.assist) { setSubject(...stagePt(e)); draw(); } });
-  ['pointerup', 'pointercancel'].forEach((ev) => stage.addEventListener(ev, () => { if (dragging && st.assist) { dragging = false; lockOn(); } }));
+  function dragTo(x, y) {
+    const a = st.assist, p = a.pts.length ? subjectPoint(a) : null;
+    if (drag === 'size') a.box = { w: Math.max(24, 2 * Math.abs(x - p.x)), h: Math.max(24, 2 * Math.abs(y - p.y)) };
+    else if (drag === 'hz') placeItem(a.hz, x, y);
+    else placeItem(a.main || a.hz, x, y);
+    updateAssist(); draw();
+  }
+  stage.addEventListener('pointermove', (e) => { if (drag && st.assist) dragTo(...stagePt(e)); });
+  ['pointerup', 'pointercancel'].forEach((ev) => stage.addEventListener(ev, () => {
+    if (!drag || !st.assist) return;
+    drag = null; $('assist').classList.remove('ghost');
+    if (st.assist.phase !== 'place') lockOn();
+    renderAssistOpts(); updateAssist(); draw();
+  }));
 
   // Bám chủ thể: so khớp mảng 17×17 điểm ảnh (trừ độ sáng trung bình) trên khung hình thu nhỏ 160px
   const TW = 160, PR = 8, PN = PR * 2 + 1;
@@ -687,10 +808,11 @@
   }
   setInterval(() => {
     const a = st.assist;
-    if (!a || a.phase !== 'guide' || dragging || !$('cam').classList.contains('on') || !video.videoWidth || document.hidden) return;
+    if (!a || a.phase === 'place' || drag || !$('cam').classList.contains('on') || !video.videoWidth || document.hidden) return;
     const f = grab(); if (!f) return;
     const tracked = a.pts.filter((p) => p.tpl);
     tracked.forEach((p) => trackPoint(f, p));
+    a.hzPts.filter((p) => p.tpl).forEach((p) => trackPoint(f, p));
     a.lost = tracked.length > 0 && tracked.every((p) => p.lost);
     updateAssist(); draw();
   }, 90);
@@ -965,7 +1087,7 @@
 
   // ---------- Khởi động ----------
   st.landscape = isLand();
-  renderSceneChips(); renderGuideChips(); renderRatioChips(); showTip(); draw();
+  renderItemChips(); renderGuideChips(); renderRatioChips(); showTip(); draw();
   startCamera();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;

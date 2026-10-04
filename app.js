@@ -207,7 +207,7 @@
     if (scrollX || scrollY) scrollTo(0, 0);
     const land = isLand();
     if (land !== lastLand) {
-      lastLand = land; st.landscape = land; renderRatioChips();
+      lastLand = land; st.landscape = land; st.asPos = null; placePanel(); renderRatioChips();
       if (st.assist) startAssist(st.assist.main, st.assist.hz);
     }
     draw();
@@ -531,6 +531,36 @@
     $('assist').hidden = true; renderItemChips(); draw();
   }
   $('asClose').onclick = exitAssist;
+  // Bảng hướng dẫn che chủ thể: thu gọn (nhớ cho lần sau) hoặc kéo thanh tiêu đề dời đi chỗ khác.
+  // Vị trí kéo tay giữ trong phiên (st.asPos), xoay máy thì bỏ vì bố cục đổi hẳn.
+  let asMini = false; try { asMini = localStorage.getItem('kn-asMini') === '1'; } catch (e) {}
+  function setMini(v) {
+    asMini = v; $('assist').classList.toggle('mini', v);
+    $('asMin').textContent = v ? '+' : '–'; $('asMin').setAttribute('aria-label', v ? 'Mở rộng hướng dẫn' : 'Thu gọn hướng dẫn');
+    try { localStorage.setItem('kn-asMini', v ? '1' : '0'); } catch (e) {}
+    placePanel();
+  }
+  $('asMin').onclick = () => setMini(!asMini);
+  function placePanel() {
+    const box = $('assist'), p = st.asPos;
+    box.classList.toggle('moved', !!p);
+    if (!p) { box.style.left = box.style.top = box.style.width = ''; return; }
+    box.style.width = p.w + 'px';
+    // nội dung đổi theo bước nên bảng cao/thấp đi — luôn giữ trọn trong khung ngắm
+    const W = stage.clientWidth, H = stage.clientHeight;
+    box.style.left = Math.max(0, Math.min(p.x, W - box.offsetWidth)) + 'px';
+    box.style.top = Math.max(0, Math.min(p.y, H - box.offsetHeight)) + 'px';
+  }
+  $('assist').querySelector('.h').addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    const box = $('assist'), h = e.currentTarget;
+    const s0 = { x: box.offsetLeft, y: box.offsetTop, w: box.offsetWidth, cx: e.clientX, cy: e.clientY };
+    h.setPointerCapture(e.pointerId);
+    const move = (ev) => { st.asPos = { x: s0.x + ev.clientX - s0.cx, y: s0.y + ev.clientY - s0.cy, w: s0.w }; placePanel(); };
+    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); };
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
+  setMini(asMini);
   const picked = (a) => [a.main, a.hz].filter(Boolean);
   function renderAssistOpts() {
     const a = st.assist, box = $('asOpts'); box.innerHTML = '';
@@ -680,6 +710,7 @@
     // mẹo chỉ hiện lúc chưa đặt chủ thể chính — sau đó bảng thu gọn để chừa chỗ chỉnh ô, và không che vòng đích
     const tip = a.phase === 'place' && !a.placed[picked(a)[0].id] ? [a.s.tip, a.main && a.main.tip, o && o.tip].filter(Boolean).join('\n') : '';
     if ($('asTip').textContent !== tip) $('asTip').textContent = tip;
+    if (st.asPos) placePanel();
   }
   function arrow(ctx, x1, y1, x2, y2, col) {
     const ang = Math.atan2(y2 - y1, x2 - x1), L = Math.hypot(x2 - x1, y2 - y1), back = Math.min(26, L * 0.5);

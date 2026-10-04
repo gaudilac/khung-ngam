@@ -121,6 +121,13 @@
     L.flat = !L.low && a.stdL < 0.14;
     L.whiteSky = a.topL > 0.8 && a.topSat < 0.1;
     L.blueSky = a.topBlue > 0.4;
+    // chủ thể phải thấy rõ (người, đồ vật, con vật, hoặc không biết là gì) thì ngược sáng là lỗi cần sửa; cảnh khác thì
+    // ngược sáng có thể thành bóng đen (silhouette) — không kéo sáng, để gợi ý đen trắng gắt
+    L.keep = !ctx.main || ctx.main === 'person' || ctx.main === 'thing' || ctx.main === 'animal';
+    // kéo phơi sáng cho chủ thể lên gần 0,5, tối đa 1 stop — nền vốn đã sáng, hơn nữa thì cháy trắng (hiRoll chỉ làm mềm mép cháy).
+    // lift là giá trị thanh "Phơi sáng" (0..1, 1 = 1,5 stop)
+    const stops = L.back && L.keep ? Math.min(1, Math.log2(0.5 / Math.max(a.subjL, 0.05))) : 0;
+    L.lift = stops >= 0.15 ? Math.round(stops / 1.5 * 20) / 20 : 0;
     const T = { back: 'ngược sáng', low: 'thiếu sáng', tungsten: 'đèn vàng', warm: 'nắng ấm', cool: 'ánh sáng lạnh', green: 'ám xanh lá',
       hard: 'nắng gắt', flat: 'ánh sáng dịu', whiteSky: 'trời trắng', blueSky: 'trời xanh' };
     return Object.assign(L, { text: Object.keys(T).filter((k) => L[k]).map((k) => T[k]).join(' · ') });
@@ -191,12 +198,12 @@
       if (o === 'sky') add('golden', 0.15, 'Trời chiếm phần lớn khung — đẩy màu trời');
     }
     // --- ánh sáng đọc được trên ảnh ---
-    const subjOut = who || c.main === 'thing' || c.main === 'animal'; // chủ thể phải thấy rõ, không thành bóng đen
     if (Lt.back) {
-      add('matte', 0.35, 'Ngược sáng — matte nâng vùng tối, chủ thể không bị đen kịt (mặt vẫn tối thì kéo Phơi sáng lên)');
+      add('matte', 0.35, 'Ngược sáng — matte nâng vùng tối, chủ thể không bị đen kịt');
       add('pastel', 0.35, 'Ngược sáng — tông sáng mềm, viền sáng quanh chủ thể ra chất trong trẻo');
       add('moody', -0.3); add('velvia', -0.15);
-      if (!subjOut) add('bwhard', 0.3, 'Ngược sáng — đen trắng gắt biến chủ thể thành bóng đen (silhouette)');
+      if (Lt.keep) add('bwhard', -0.5); // tương phản gắt dìm chủ thể tối lại, ngược với việc vừa kéo sáng
+      else add('bwhard', 0.3, 'Ngược sáng — đen trắng gắt biến chủ thể thành bóng đen (silhouette)');
     }
     if (Lt.tungsten) {
       add('auto', 0.6, 'Đèn vàng ban đêm — cân lại ám vàng để da và đồ vật đúng màu');

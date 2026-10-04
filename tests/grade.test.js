@@ -32,6 +32,14 @@ assert(G.light(ba).back, 'phải nhận ra ngược sáng theo ô chủ thể');
 assert(!G.light(G.analyze(back)).back, 'không có ô thì vùng giữa (sáng) không phải ngược sáng');
 const bs = G.suggest(ba, { main: 'person', opt: 'half' });
 assert(bs.slice(0, 3).some((x) => /Ngược sáng/.test(x.why)), 'ngược sáng phải có gợi ý kèm lý do ngược sáng: ' + bs.slice(0, 3).map((x) => x.why));
+// ngược sáng thì tự kéo phơi sáng (thanh 0..1, tối đa 1 stop = 0,67); không ngược sáng thì không đụng
+const lift = G.light(ba).lift;
+assert(lift > 0 && lift <= 0.67 + 1e-9 && G.light(fa).lift === 0, 'mức tự kéo phơi sáng sai: ' + lift);
+assert(G.light(ba, { main: 'accent' }).lift === 0 && /silhouette/.test(G.suggest(ba, { main: 'accent' }).find((x) => x.id === 'bwhard').why), 'điểm nhấn ngược sáng: để bóng đen, không kéo sáng');
+assert(!/silhouette/.test(G.suggest(ba).find((x) => x.id === 'bwhard').why), 'không rõ chủ thể thì không gợi ý bóng đen trong khi đang kéo sáng');
+const lo = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4) }, sp = ((H * 0.5 | 0) * W + (W * 0.2 | 0)) * 4;
+G.apply(back, lo, G.resolve(G.PRESETS[0], Object.assign({}, zero, { ev: lift }), ba), 1);
+assert(lo.data[sp] > back.data[sp] + 15 && lo.data[0] >= 235, 'kéo phơi sáng phải làm chủ thể sáng lên mà nền không tối đi');
 // cùng một ảnh ấm và tối: 21 giờ là đèn vàng → Tự cân; 17 giờ là nắng chiều → không phải đèn vàng
 const warmDark = mk((u, v) => [120 + 30 * u, 80 + 20 * u, 40]);
 const wa = G.analyze(warmDark);

@@ -7,7 +7,7 @@ const OUT = process.env.OUT || require('os').tmpdir() + '/khung-ngam-test'; fs.m
   const b = await puppeteer.launch({ headless: 'new', args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   const p = await b.newPage();
   const errs = [];
-  p.on('pageerror', (e) => errs.push('pageerror ' + e.message));
+  p.on('pageerror', (e) => errs.push('pageerror ' + (e.stack || e.message)));
   p.on('console', (m) => { if (m.type() === 'error') errs.push('console ' + m.text()); });
   await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await p.goto((process.env.URL || 'http://localhost:8765/'), { waitUntil: 'networkidle0' });
@@ -21,6 +21,33 @@ const OUT = process.env.OUT || require('os').tmpdir() + '/khung-ngam-test'; fs.m
   await clickChip('Xoắn'); await p.screenshot({ path: OUT + '/2b-spiral-v1.png' });
   await clickChip('Đường chéo'); await p.screenshot({ path: OUT + '/3-diag.png' });
   await clickChip('Tam giác'); await p.screenshot({ path: OUT + '/4-tri.png' });
+  // gợi ý khung: hàm phân tích trên ảnh tự dựng; ★ hiện trên đúng 1 chip; bảng so sánh mở bằng "?" và chọn được khung
+  const goiY = await p.evaluate(() => {
+    const W = 160, H = 120, mk = (f) => { const g = new Float32Array(W * H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) g[y * W + x] = f(x, y); return g; };
+    const rnd = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    const nz = (x, y) => (rnd(x, y) - 0.5) * 6; // nhiễu nhỏ, dưới ngưỡng cạnh
+    const tex = (x, y) => 128 + 90 * (rnd(x >> 2, y >> 2) - 0.5); // hoa văn ô 4px
+    const id = (g) => { const r = KN.suggestGuide(g, W, H); return r ? r.id : null; };
+    return {
+      tron: id(mk((x, y) => 120 + nz(x, y))),
+      doixung: id(mk((x, y) => tex(Math.min(x, W - 1 - x), y))),
+      diemnhan: id(mk((x, y) => (x >= 28 && x < 40 && y >= 70 && y < 82 ? 230 : 90) + nz(x, y))),
+      giua: id(mk((x, y) => (x >= 50 && x < 115 && y >= 35 && y < 90 ? tex(x, y) : 100 + nz(x, y)))),
+      cheo: id(mk((x, y) => 128 + 70 * Math.sin((x + y) * 0.35) + nz(x, y))),
+      chantroi: id(mk((x, y) => (y < 50 ? 200 : 70) + nz(x, y))),
+      hoavan: id(mk(tex)),
+    };
+  });
+  await p.waitForFunction(() => !!KN.st.sug, { timeout: 6000 });
+  const sugChip = await p.evaluate(() => [...document.querySelectorAll('#guides .chip')].filter((c) => c.querySelector('.sug')).map((c) => c.textContent));
+  await p.evaluate(() => document.querySelector('#guides .chip.help').click());
+  const sh = await p.evaluate(() => ({ open: !gsheet.hidden, rows: document.querySelectorAll('#gsList .grow').length, sug: gsSug.textContent }));
+  await p.screenshot({ path: OUT + '/4b-bang-khung.png' });
+  await p.evaluate(() => [...document.querySelectorAll('#gsList .grow')].find((b) => b.textContent.startsWith('Đối xứng')).click());
+  const sh2 = await p.evaluate(() => ({ open: !gsheet.hidden, guide: KN.st.guide }));
+  console.log('goi y', JSON.stringify(goiY), JSON.stringify(sugChip), JSON.stringify(sh), JSON.stringify(sh2));
+  assert.deepStrictEqual(goiY, { tron: null, doixung: 'center', diemnhan: 'spiral', giua: 'phi', cheo: 'diag', chantroi: 'thirds', hoavan: 'thirds' }, 'gợi ý khung sai');
+  assert(sugChip.length === 1 && sh.open && sh.rows === 6 && /★/.test(sh.sug) && !sh2.open && sh2.guide === 'center', 'bảng so sánh khung chưa đúng');
   // thước cân bằng: máy xoay theo chiều kim đồng hồ 10° → vạch phải nghiêng ngược chiều (-10°)
   await p.evaluate(() => levelBtn.click());
   const th = 10 * Math.PI / 180;

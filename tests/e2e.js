@@ -104,6 +104,26 @@ const OUT = process.env.OUT || require('os').tmpdir() + '/khung-ngam-test'; fs.m
   await p.evaluate(() => pv.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })));
   console.log('bw px', px, 'giữ để so', px2);
   await p.evaluate(() => adv.open = true); await p.screenshot({ path: OUT + '/8-bw-adv.png', fullPage: false });
+  // ảnh ngược sáng (nền trời trắng, người tối ở giữa): mở ra là thanh Phơi sáng đã tự kéo lên; Đặt lại thì về 0
+  const backUrl = await p.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 1200; c.height = 1600; const x = c.getContext('2d');
+    x.fillStyle = '#f2f0ea'; x.fillRect(0, 0, 1200, 1600);
+    x.fillStyle = '#4a3a30'; x.beginPath(); x.arc(600, 620, 200, 0, 7); x.fill(); x.fillRect(330, 820, 540, 780);
+    return c.toDataURL('image/jpeg', 0.9);
+  });
+  const bimg = path.join(OUT, 'nguoc-sang.jpg'); fs.writeFileSync(bimg, Buffer.from(backUrl.split(',')[1], 'base64'));
+  await p.evaluate(() => back.click());
+  await (await p.$('#file')).uploadFile(bimg);
+  await p.waitForFunction(() => document.getElementById('edit').classList.contains('on'));
+  await new Promise(r => setTimeout(r, 600));
+  const evOf = () => p.evaluate(() => ({ ev: +document.querySelector('#adjs input').value, on: document.querySelector('.pr.on').dataset.id, note: note.textContent }));
+  const nb = await evOf();
+  await p.screenshot({ path: OUT + '/9-nguoc-sang.png' });
+  await p.evaluate(() => reset.click()); await new Promise(r => setTimeout(r, 200));
+  const nb2 = await evOf();
+  console.log('nguoc sang', JSON.stringify(nb), '| đặt lại', JSON.stringify(nb2));
+  assert(nb.ev >= 20 && nb.on !== 'bwhard' && /ngược sáng/.test(nb.note) && /tự kéo Phơi sáng/.test(nb.note), 'ngược sáng mà không tự kéo phơi sáng: ' + JSON.stringify(nb));
+  assert(nb2.ev === 0 && !/tự kéo/.test(nb2.note), 'Đặt lại phải đưa phơi sáng về 0: ' + JSON.stringify(nb2));
   console.log('errors', errs);
   assert.strictEqual(info.nocam, false, 'camera không mở');
   assert.deepStrictEqual([lv1.tr, lv2], ['rotate(-10deg)', 'rotate(-10deg)'], 'thước cân bằng sai hướng (Android / iOS)');

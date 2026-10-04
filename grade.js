@@ -62,11 +62,16 @@
   ];
 
   // ---------- Phân tích ảnh (dùng ImageData đã thu nhỏ) ----------
-  function analyze(img) {
-    const d = img.data, n = d.length / 4;
+  // box: vùng chủ thể {x, y, w, h} theo tỉ lệ 0..1 của ảnh (người dùng đặt lúc chụp); không có thì lấy vùng giữa
+  function analyze(img, box) {
+    const d = img.data, n = d.length / 4, W = img.width || 1, H = n / W;
     const hist = new Uint32Array(256);
     let sL = 0, sL2 = 0, sS = 0, sr = 0, sg = 0, sb = 0;
     let warm = 0, cool = 0, skin = 0, green = 0, blue = 0, dark = 0, bright = 0;
+    const bx = box || { x: 0.3, y: 0.25, w: 0.4, h: 0.5 };
+    const x0 = Math.floor(clamp(bx.x, 0, 1) * W), x1 = Math.ceil(clamp(bx.x + bx.w, 0, 1) * W);
+    const y0 = Math.floor(clamp(bx.y, 0, 1) * H), y1 = Math.ceil(clamp(bx.y + bx.h, 0, 1) * H), topH = Math.max(1, Math.round(H / 4));
+    let uL = 0, uN = 0, uSkin = 0, tL = 0, tS = 0, tBlue = 0, tN = 0, cRB = 0, cG = 0, cN = 0, gN = 0;
     for (let i = 0; i < d.length; i += 4) {
       const R = d[i], G = d[i + 1], B = d[i + 2];
       const r = R / 255, g = G / 255, b = B / 255;
@@ -81,6 +86,12 @@
       if (s > 0.12 && b >= r && b >= g) blue++;
       if (L < 0.15) dark++;
       if (L > 0.85) bright++;
+      const px = (i >> 2) % W, py = ((i >> 2) / W) | 0;
+      if (px >= x0 && px < x1 && py >= y0 && py < y1) { uL += L; uN++; if (R > 95 && G > 40 && B > 20 && R > G && R > B && R - Math.min(G, B) > 15 && Math.abs(R - G) > 15 && R - B < 150) uSkin++; }
+      if (py < topH) { tL += L; tS += s; tN++; if (s > 0.12 && b >= r && b >= g) tBlue++; }
+      // màu của nguồn sáng đọc ở vùng trung tính sáng vừa — vật rực màu (áo đỏ, lá xanh) không được tính là ám
+      // đèn vàng làm tường trắng bão hoà tới ~0.45 nên ấm/lạnh xét rộng; ám xanh lá thì nhẹ, xét rộng là bắt nhầm cỏ cây
+      if (L > 0.2 && L < 0.9 && s < 0.35) { cRB += r - b; cN++; if (s < 0.15) { cG += g - (r + b) / 2; gN++; } }
     }
     const pct = (q) => { let acc = 0, t = q * n; for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= t) return i / 255; } return 1; };
     const meanL = sL / n;
@@ -89,7 +100,30 @@
       avg: [sr / n, sg / n, sb / n],
       warm: warm / n, cool: cool / n, skin: skin / n, green: green / n, blue: blue / n,
       dark: dark / n, bright: bright / n, lo: pct(0.005), hi: pct(0.995),
+      hasBox: !!box, subjL: uN ? uL / uN : meanL, bgL: n > uN ? (sL - uL) / (n - uN) : meanL, subjSkin: uN ? uSkin / uN : 0,
+      topL: tN ? tL / tN : meanL, topSat: tN ? tS / tN : 0, topBlue: tN ? tBlue / tN : 0,
+      castRB: cN ? cRB / cN : 0, castG: gN > n * 0.05 ? cG / gN : 0,
     };
+  }
+
+  // Đọc ánh sáng từ thống kê ảnh + giờ chụp. Trả về các nhãn để người dùng hiểu vì sao app gợi ý gam đó.
+  // ctx.hour chỉ dùng để tách đèn vàng ban đêm khỏi nắng chiều — hai thứ cùng ấm nhưng cần xử lý ngược nhau.
+  function light(a, ctx) {
+    ctx = ctx || {};
+    const night = ctx.hour != null && (ctx.hour >= 18 || ctx.hour < 6), L = {};
+    L.back = a.bgL > 0.45 && a.subjL < a.bgL * (a.hasBox ? 0.65 : 0.55);
+    L.low = a.meanL < 0.22;
+    L.tungsten = a.castRB > 0.1 && night && a.meanL < 0.45;
+    L.warm = a.castRB > 0.08 && !L.tungsten;
+    L.cool = a.castRB < -0.05;
+    L.green = a.castG > 0.03 && a.green < 0.3;
+    L.hard = !L.low && (a.stdL > 0.27 || (a.dark > 0.12 && a.bright > 0.06));
+    L.flat = !L.low && a.stdL < 0.14;
+    L.whiteSky = a.topL > 0.8 && a.topSat < 0.1;
+    L.blueSky = a.topBlue > 0.4;
+    const T = { back: 'ngược sáng', low: 'thiếu sáng', tungsten: 'đèn vàng', warm: 'nắng ấm', cool: 'ánh sáng lạnh', green: 'ám xanh lá',
+      hard: 'nắng gắt', flat: 'ánh sáng dịu', whiteSky: 'trời trắng', blueSky: 'trời xanh' };
+    return Object.assign(L, { text: Object.keys(T).filter((k) => L[k]).map((k) => T[k]).join(' · ') });
   }
 
   function autoParams(a) {
@@ -100,25 +134,86 @@
     return { levels: [lo, hi], wb, contrast: 0.08, vib: 0.22, hiRoll: 0.3 };
   }
 
-  // Chấm điểm preset theo nội dung ảnh, trả về top gợi ý kèm lý do
-  function suggest(a) {
+  // Chấm điểm preset theo nội dung ảnh + bối cảnh lúc chụp, trả về top gợi ý kèm lý do.
+  // ctx (tuỳ chọn): { main: item chủ thể, opt: lựa chọn con, hz: có chân trời, selfie, hour } — ảnh chọn từ thư viện thì không có.
+  function suggest(a, ctx) {
+    const c = ctx || {}, o = c.opt, Lt = light(a, c), who = c.main === 'person';
+    // bộ dò da bắt nhầm mọi mặt màu cam: gỗ, món ăn, lông thú, cả bức tường dưới đèn vàng → không tin nó khi ảnh ám màu
+    // mạnh hoặc người dùng đã nói chủ thể không phải người; mặt người hiếm khi chiếm quá 35% khung
+    let sk = Math.min(a.skin, 0.35);
+    if (who && a.hasBox) sk = Math.max(sk, Math.min(a.subjSkin, 1) * 0.35);
+    else if (c.main) sk *= 0.3;
+    else if (a.castRB > 0.1) sk = Math.min(sk, 0.1);
     const sc = {
       auto: [0.35 + (a.hi - a.lo < 0.75 ? 0.35 : 0) + (Math.max(...a.avg) - Math.min(...a.avg) > 0.08 ? 0.2 : 0),
         'Ảnh hơi đục hoặc ám màu — cân lại điểm đen, điểm trắng'],
-      portra: [a.skin * 4 + a.warm * 0.4, 'Có tông da người — Portra giữ da hồng hào, mềm mại'],
-      pastel: [a.skin * 1.5 + (a.meanL > 0.55 ? 0.4 : 0) + (a.meanSat < 0.3 ? 0.15 : 0), 'Ảnh sáng và nhẹ — hợp tông pastel trong trẻo'],
+      portra: [sk * 4 + a.warm * 0.4, 'Có tông da người — Portra giữ da hồng hào, mềm mại'],
+      pastel: [sk * 1.5 + (a.meanL > 0.55 ? 0.4 : 0) + (a.meanSat < 0.3 ? 0.15 : 0), 'Ảnh sáng và nhẹ — hợp tông pastel trong trẻo'],
       cine: [Math.min(a.warm, a.cool) * 3.5, 'Có cả vùng ấm lẫn vùng lạnh — tách cam / xanh ngọc kiểu điện ảnh'],
       golden: [a.warm * 1.2 + (a.meanL > 0.3 && a.meanL < 0.7 ? 0.1 : 0), 'Nhiều ánh vàng ấm — đẩy thành giờ vàng'],
-      velvia: [(a.green + a.blue) * 1.5 + (a.skin < 0.05 ? 0.15 : 0), 'Có trời, nước hoặc cây — Velvia cho màu rực và sâu'],
+      velvia: [(a.green + a.blue) * 1.5 + (sk < 0.05 ? 0.15 : 0), 'Có trời, nước hoặc cây — Velvia cho màu rực và sâu'],
       nordic: [a.blue * 1.0 + (a.meanL > 0.5 ? 0.2 : 0) + (a.meanSat < 0.25 ? 0.2 : 0), 'Trời xanh, ánh sáng dịu — tông lạnh tối giản'],
-      chrome: [(a.meanSat > 0.12 && a.meanSat < 0.35 ? 0.3 : 0) + a.stdL + (a.skin < 0.1 ? 0.1 : 0), 'Cảnh đời thường, khối sáng tối rõ — chất ảnh đường phố'],
+      chrome: [(a.meanSat > 0.12 && a.meanSat < 0.35 ? 0.3 : 0) + a.stdL + (sk < 0.1 ? 0.1 : 0), 'Cảnh đời thường, khối sáng tối rõ — chất ảnh đường phố'],
       moody: [(a.meanL < 0.35 ? 0.6 : 0) + a.dark * 0.8 + a.green * 0.3, 'Ảnh trầm, nhiều vùng tối — giữ không khí tĩnh lặng'],
       bwhard: [a.stdL * 2 + (a.meanSat < 0.15 ? 0.5 : 0), 'Sáng tối tương phản mạnh, ít màu — đen trắng làm nổi hình khối'],
-      bwsoft: [(a.meanSat < 0.15 ? 0.4 : 0) + a.skin * 1.2, 'Chân dung đen trắng mềm, cổ điển'],
+      bwsoft: [(a.meanSat < 0.15 ? 0.4 : 0) + sk * 1.2, 'Chân dung đen trắng mềm, cổ điển'],
       matte: [0.2 + (a.stdL > 0.27 ? 0.25 : 0) + a.bright * 0.5, 'Tương phản hơi gắt — matte làm dịu, ra chất film'],
       vintage: [0.15 + a.warm * 0.3, 'Tông ấm — hợp màu hoài cổ'],
     };
-    return Object.entries(sc).map(([id, [s, why]]) => ({ id, s, why })).sort((x, y) => y.s - x.s);
+    // lý do hiện ra = yếu tố cộng điểm nhiều nhất; thống kê chung chỉ là lý do khi không có gì cụ thể hơn
+    const top = {};
+    const add = (id, v, why) => { sc[id][0] += v; if (why && v > (top[id] ? top[id].v : 0.14)) top[id] = { v, why }; };
+    // --- chủ thể người dùng đã chọn ---
+    if (who) {
+      add('portra', 0.5, 'Chụp người — Portra giữ da hồng hào, mềm mại');
+      add('velvia', -0.4); add('bwhard', -0.2); add('nordic', -0.15); add('moody', -0.1);
+      if (o === 'face') { add('bwsoft', 0.35, 'Cận mặt — đen trắng mềm dồn mắt người xem vào biểu cảm'); add('pastel', 0.2, 'Cận mặt — sáng, trong, da mịn'); }
+      if (o === 'half') add('pastel', 0.2, 'Bán thân — sáng, trong, da mịn');
+      if (o === 'full') add('chrome', 0.35, 'Toàn thân, khoe trang phục — màu áo trầm và sang, da không bị bệt');
+      if (o === 'env') { add('velvia', 0.35); add('cine', 0.4, 'Người nhỏ trong cảnh — tách da ấm khỏi nền lạnh cho người nổi lên'); add('golden', 0.15); }
+      if (c.hz) add('cine', 0.45, 'Người + biển/trời — đúng công thức điện ảnh: da cam ấm trên nền xanh ngọc');
+      if (c.selfie) add('pastel', 0.15, 'Ảnh tự chụp — tông sáng mềm, che bớt khuyết điểm da');
+    }
+    if (c.main === 'animal') { add('golden', 0.25, 'Con vật — tông ấm làm lông lên màu, trông mềm'); add('portra', 0.2, 'Con vật — màu tự nhiên, mềm'); add('bwhard', -0.1); }
+    if (c.main === 'thing') {
+      add('pastel', 0.3, 'Đồ vật, món ăn — sáng và trong như ảnh quán cà phê'); add('portra', 0.15, 'Đồ vật, món ăn — ấm, màu tự nhiên');
+      add('moody', -0.15); add('nordic', -0.1); // món ăn ngả lạnh trông kém ngon
+      if (o === 'min') { add('nordic', 0.4, 'Bố cục tối giản — tông lạnh nhạt cho khoảng trống thêm sạch'); add('bwhard', 0.15); }
+      if (o === 'fill') { add('velvia', 0.2, 'Vật kín khung — màu rực làm chi tiết, hoa văn nổi lên'); add('chrome', 0.15); }
+    }
+    if (c.main === 'flower') { add('velvia', 0.4, 'Hoa, cây — Velvia cho cánh hoa và lá rực, sâu'); add('pastel', 0.3, 'Hoa — tông pastel nhẹ, mơ màng'); add('chrome', -0.2); add('nordic', -0.15); add('moody', -0.15); }
+    if (c.main === 'house') { add('chrome', 0.3, 'Công trình — màu trầm, khối sáng tối rõ'); add('nordic', 0.3, 'Kiến trúc — tông lạnh, sạch, tối giản'); add('bwhard', 0.3, 'Kiến trúc — đen trắng gắt làm nổi hình khối, đường nét'); }
+    if (c.main === 'road') { add('cine', 0.25, 'Con đường — tông điện ảnh cho cảm giác hành trình'); add('chrome', 0.25, 'Con đường — chất ảnh đường phố'); add('golden', 0.15); add('bwhard', 0.15); }
+    if (c.main === 'accent') { add('moody', 0.25, 'Điểm nhấn nhỏ giữa cảnh rộng — tông trầm làm cảnh tĩnh, điểm nhấn nổi lên'); add('velvia', 0.2, 'Cảnh rộng — màu rực, sâu'); add('cine', 0.15); }
+    if (!c.main && c.hz) {
+      add('velvia', 0.3, 'Phong cảnh biển, núi — Velvia cho trời và nước sâu màu');
+      if (o === 'mirror') add('nordic', 0.3, 'Mặt nước phản chiếu — tông lạnh, trong, tĩnh');
+      if (o === 'sky') add('golden', 0.15, 'Trời chiếm phần lớn khung — đẩy màu trời');
+    }
+    // --- ánh sáng đọc được trên ảnh ---
+    const subjOut = who || c.main === 'thing' || c.main === 'animal'; // chủ thể phải thấy rõ, không thành bóng đen
+    if (Lt.back) {
+      add('matte', 0.35, 'Ngược sáng — matte nâng vùng tối, chủ thể không bị đen kịt (mặt vẫn tối thì kéo Phơi sáng lên)');
+      add('pastel', 0.35, 'Ngược sáng — tông sáng mềm, viền sáng quanh chủ thể ra chất trong trẻo');
+      add('moody', -0.3); add('velvia', -0.15);
+      if (!subjOut) add('bwhard', 0.3, 'Ngược sáng — đen trắng gắt biến chủ thể thành bóng đen (silhouette)');
+    }
+    if (Lt.tungsten) {
+      add('auto', 0.6, 'Đèn vàng ban đêm — cân lại ám vàng để da và đồ vật đúng màu');
+      add('cine', 0.25, 'Đèn đêm — tách cam/xanh kiểu phim, giữ không khí phố đêm'); add('golden', -0.4); add('portra', -0.4); add('vintage', -0.1); // hai gam này ấm thêm — da vốn đã cam
+    }
+    if (Lt.warm) { add('golden', 0.35, 'Nắng ấm — đẩy hẳn thành giờ vàng'); add('portra', 0.15, 'Nắng ấm — Portra giữ ánh nắng mà da không bị cam'); }
+    if (Lt.cool) {
+      add('nordic', 0.3, 'Ánh sáng lạnh (bóng râm, trời âm u) — giữ tông lạnh tối giản'); add('moody', 0.2, 'Ánh sáng lạnh — giữ không khí tĩnh lặng');
+      if (who) add('auto', 0.3, 'Người đứng trong bóng râm, da bị ám xanh — cân lại màu da');
+    }
+    if (Lt.green) add('auto', 0.5, 'Ám xanh lá (thường do đèn huỳnh quang) — cân lại màu');
+    if (Lt.hard) { add('matte', 0.25, 'Nắng gắt — matte làm dịu tương phản, ra chất film'); add('bwhard', who ? 0.1 : 0.25, 'Nắng gắt, bóng đổ rõ — đen trắng làm nổi hình khối'); add('pastel', -0.2); }
+    if (Lt.flat) { add('chrome', 0.2, 'Ánh sáng dịu, phẳng — Classic Chrome thêm chiều sâu'); add('velvia', who ? 0 : 0.15); add('matte', -0.2); }
+    if (Lt.low) { add('moody', 0.3, 'Thiếu sáng — giữ không khí tối thay vì cố kéo sáng'); add(who ? 'bwsoft' : 'bwhard', 0.25, 'Thiếu sáng, ảnh nhiều nhiễu — đen trắng biến nhiễu thành hạt film'); add('pastel', -0.3); }
+    if (Lt.whiteSky) { add('nordic', 0.2, 'Trời trắng đục — tông lạnh nhạt biến trời đục thành tối giản'); add('bwhard', who ? 0 : 0.2, 'Trời trắng đục — đen trắng không cần màu trời'); add('velvia', -0.2); }
+    if (Lt.blueSky) { add('velvia', 0.2, 'Trời xanh — Velvia đẩy trời sâu màu'); add('cine', 0.15); }
+    return Object.entries(sc).map(([id, [s, why]]) => ({ id, s, why: top[id] ? top[id].why : why })).sort((x, y) => y.s - x.s);
   }
 
   // ---------- Gộp tham số preset + chỉnh tay ----------
@@ -290,5 +385,5 @@
     return { name: 'Lân cận mở rộng', desc: 'Dải màu trải một góc vừa phải — hài hoà mà vẫn có điểm nhấn', temp };
   }
 
-  global.Grade = { PRESETS, analyze, suggest, resolve, apply, palette, harmony, lum };
+  global.Grade = { PRESETS, analyze, light, suggest, resolve, apply, palette, harmony, lum };
 })(typeof window !== 'undefined' ? window : globalThis);

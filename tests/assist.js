@@ -1,4 +1,4 @@
-// Kiểm "Chụp gì?" (bám chủ thể + chỉ hướng), toàn màn hình, nút Lưu vào Ảnh.
+// Kiểm "Trong khung có:" (kéo nút vào khung, tiến/lùi, bám chủ thể + chỉ hướng), toàn màn hình, nút Lưu vào Ảnh.
 // Camera giả = video tự dựng: hoa văn trôi sang PHẢI 1px video/khung hình, 30 khung/giây.
 // Cần server: python3 -m http.server 8765 (trong Photo_Art)
 // NODE_PATH="../web_task/node_modules" node tests/assist.js   — ảnh chụp màn hình ở $OUT
@@ -47,19 +47,46 @@ function makeVideo(file) {
   const chip = (sel, txt) => p.evaluate((s, t) => [...document.querySelectorAll(s)].find((c) => c.textContent.startsWith(t)).click(), sel, txt);
   const stageBox = await p.evaluate(() => { const r = stage.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
 
-  // 1) Người: chọn → khung 4:5 + một phần ba, chạm vào chủ thể → có mục tiêu + chỉ hướng
+  const tapAt = async (u, v) => { await p.touchscreen.tap(stageBox.x + stageBox.w * u, stageBox.y + stageBox.h * v); await sleep(150); };
+  const trang = () => p.evaluate(() => ({ phase: KN.st.assist && KN.st.assist.phase, step: asStep.textContent, msg: asMsg.textContent, go: !asGo.hidden && !asGo.disabled, dock: assist.classList.contains('dock') }));
+  // kéo nút vật từ bảng vào khung bằng cảm ứng thật: chạm – rê – thả
+  const keo = async (name, u, v) => {
+    const b = await p.evaluate((n) => { const r = [...document.querySelectorAll('#asTok .chip')].find((c) => c.textContent.includes(n)).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, name);
+    await p.touchscreen.touchStart(b.x, b.y); await p.touchscreen.touchMove(b.x, b.y - 20);
+    await p.touchscreen.touchMove(stageBox.x + stageBox.w * u, stageBox.y + stageBox.h * v); await p.touchscreen.touchEnd(); await sleep(120);
+  };
+  // kéo chấm ở góc ô: f(R, q) trả vị trí mới của góc (toạ độ khung ngắm) theo khung R và tâm ô q
+  const coGoc = async (f) => {
+    const g = await p.evaluate((fs) => { const a = KN.st.assist, q = a.pts[0], R = KN.crop(); return { x: q.x + a.box.w / 2, y: q.y + a.box.h / 2, to: new Function('R', 'q', 'return ' + fs)(R, q) }; }, f);
+    await p.touchscreen.touchStart(stageBox.x + g.x, stageBox.y + g.y); await p.touchscreen.touchMove(stageBox.x + g.to.x, stageBox.y + g.to.y); await p.touchscreen.touchEnd(); await sleep(120);
+  };
+  const xong = async () => { await p.click('#asGo'); await sleep(120); };
+  // chọn 1 thứ → (việc thêm ở bước 1) → kéo vào khung → Xong → Tiếp nếu có bước khoảng cách → tới bước căn khung
+  const chon = async (name, u, v, them) => {
+    await chip('#scenes .chip', name); if (them) await them();
+    await keo(name, u, v); await xong();
+    if ((await trang()).phase === 'dist') await xong();
+  };
+
+  // 1) Người: chọn → khung 4:5 + một phần ba, bảng xuống đáy; kéo nút lên mặt, kéo góc ô vừa mặt → bỏ qua bước khoảng cách
   await chip('#scenes .chip', 'Người');
-  const s1 = await p.evaluate(() => ({ guide: KN.st.guide, ratio: document.querySelector('#ratios .chip.on').textContent, step: asStep.textContent, msg: asMsg.textContent }));
+  const s1 = await p.evaluate(() => ({ guide: KN.st.guide, ratio: document.querySelector('#ratios .chip.on').textContent }));
+  const s1b = await trang();
+  await sleep(400); // chờ mẹo của khung mờ hẳn
   await p.screenshot({ path: OUT + '/a1-nguoi-buoc1.png' });
-  // chạm gần góc dưới-trái để chắc chắn phải lia máy
-  await p.touchscreen.tap(stageBox.x + stageBox.w * 0.25, stageBox.y + stageBox.h * 0.7);
-  await sleep(150);
-  const s2 = await p.evaluate(() => ({ step: asStep.textContent, msg: asMsg.textContent, t: KN.st.assist.t, ok: KN.st.assist.ok }));
-  console.log('nguoi', JSON.stringify(s1), JSON.stringify(s2));
+  await keo('Người', 0.25, 0.7);
+  const s1c = await trang();
+  // ô vừa đúng cỡ mặt của Cận mặt (1,06 × 0,37 chiều cao khung) → không cần tiến/lùi
+  await coGoc('({ x: q.x + 0.15 * R.h, y: q.y + 0.196 * R.h })');
+  await p.screenshot({ path: OUT + '/a1b-nguoi-o-mat.png' });
+  await xong();
+  const s2 = await p.evaluate(() => ({ step: asStep.textContent, msg: asMsg.textContent, t: KN.st.assist.t, ok: KN.st.assist.ok, go: asGo.hidden }));
+  console.log('nguoi', JSON.stringify(s1), JSON.stringify(s1b), JSON.stringify(s1c), JSON.stringify(s2));
   await p.screenshot({ path: OUT + '/a2-nguoi-buoc2.png' });
-  assert.deepStrictEqual([s1.guide, s1.ratio, s1.step.startsWith('Bước 1')], ['thirds', '4:5', true], 'chọn Người phải đặt khung một phần ba 4:5');
-  // chủ thể ở dưới-trái, mục tiêu ở 1/3 trên-trái: chủ thể phải sang phải + lên trên → lia máy sang TRÁI, CHÚC xuống
-  assert(s2.step.startsWith('Bước 2') && /sang trái/.test(s2.msg) && /chúc máy xuống/.test(s2.msg), 'chỉ sai hướng lia máy: ' + s2.msg);
+  assert.deepStrictEqual([s1.guide, s1.ratio, s1b.step.startsWith('Bước 1/3'), s1b.go, s1b.dock], ['thirds', '4:5', true, false, true], 'chọn Người: khung một phần ba 4:5, bước 1/3, nút Xong khoá tới khi kéo nút vào, bảng ở đáy');
+  assert(/Kéo nút "Người"/.test(s1b.msg) && /góc ô/.test(s1c.msg) && s1c.go, 'kéo nút vào rồi phải nhắc kéo góc ô và mở nút Xong: ' + s1c.msg);
+  // ô vừa cỡ → nhảy thẳng bước 3; chủ thể dưới-trái, đích 1/3 trên-trái → lia máy sang TRÁI, CHÚC xuống
+  assert(s2.step.startsWith('Bước 3/3') && s2.go && /sang trái/.test(s2.msg) && /chúc máy xuống/.test(s2.msg), 'chỉ sai hướng lia máy: ' + JSON.stringify(s2));
   // kiểu chụp: Toàn thân → khung 2:3, mắt cao hơn 1/3 (giữ trọn chân); Cận mặt → về 4:5
   const kieu = () => p.evaluate(() => { const R = KN.crop(), t = KN.st.assist.t; return { ratio: document.querySelector('#ratios .chip.on').textContent, ty: (t.y - R.y) / R.h }; });
   // viền người: đếm điểm ảnh trắng trên lớp vẽ đè dọc mép dưới bàn chân phải của viền Toàn thân
@@ -88,25 +115,25 @@ function makeVideo(file) {
   assert(k1.ratio === '2:3' && Math.abs(k1.ty - 0.25) < 0.02, 'Toàn thân phải khung 2:3, mắt ở 0,25 chiều cao');
   assert(k2.ratio === '4:5' && Math.abs(k2.ty - 1 / 3) < 0.02, 'Cận mặt phải về khung 4:5, mắt ở 1/3');
 
-  // 2) Bám chủ thể: cảnh trôi sang phải → chấm phải trôi sang phải, không mất dấu
-  await chip('#scenes .chip', 'Đồ vật');
-  await p.touchscreen.tap(stageBox.x + stageBox.w * 0.3, stageBox.y + stageBox.h * 0.5);
-  await sleep(200);
+  // 2) Đồ vật: ô mặc định nhỏ hơn ô đích → bước Khoảng cách "Tiến lại gần"; bám chủ thể chạy ngay từ bước này
+  await chip('#scenes .chip', 'Đồ vật'); await keo('Đồ vật', 0.3, 0.5); await xong();
+  const kc = await trang();
   const p0 = await p.evaluate(() => ({ x: KN.st.assist.pts[0].x, y: KN.st.assist.pts[0].y, std: KN.st.assist.pts[0].tpl && KN.st.assist.pts[0].tpl.std }));
+  await p.screenshot({ path: OUT + '/a2c-khoang-cach.png' });
   await sleep(1500);
   const p1 = await p.evaluate(() => ({ x: KN.st.assist.pts[0].x, y: KN.st.assist.pts[0].y, lost: KN.st.assist.lost, vw: video.videoWidth, vh: video.videoHeight }));
   const sc = Math.max(stageBox.w / p1.vw, stageBox.h / p1.vh);
-  console.log('bam', JSON.stringify(p0), JSON.stringify(p1), 'dx', (p1.x - p0.x).toFixed(1), 'dy', (p1.y - p0.y).toFixed(1), 'kỳ vọng ~', (30 * 1.5 * sc).toFixed(0));
-  await p.screenshot({ path: OUT + '/a3-bam.png' });
+  console.log('khoang cach', JSON.stringify(kc), '| bam', JSON.stringify(p0), JSON.stringify(p1), 'dx', (p1.x - p0.x).toFixed(1), 'dy', (p1.y - p0.y).toFixed(1), 'kỳ vọng ~', (30 * 1.5 * sc).toFixed(0));
+  assert(kc.phase === 'dist' && kc.step.startsWith('Bước 2/3') && /Tiến lại gần/.test(kc.msg) && kc.go && !kc.dock, 'ô nhỏ hơn đích phải hỏi tiến lại gần: ' + JSON.stringify(kc));
   assert(!p1.lost, 'mất dấu dù cảnh có chi tiết');
-  assert(/vừa ô/.test(await khop()), 'Đồ vật thiếu câu nhắc ô đặt vật');
   assert(p1.x - p0.x > 30 * 1.5 * sc * 0.4 && p1.x - p0.x < 30 * 1.5 * sc * 1.6, 'chấm không trôi theo cảnh');
   assert(Math.abs(p1.y - p0.y) < 15, 'chấm trôi dọc dù cảnh chỉ trôi ngang');
+  await xong();
+  assert((await trang()).phase === 'guide' && /vừa ô/.test(await khop()), 'Đồ vật thiếu câu nhắc ô đặt vật');
 
-  // 3) Chân trời: có vạch, đổi lựa chọn "Cảnh dưới đẹp hơn" → mục tiêu lên 1/3 trên
-  await chip('#scenes .chip', 'Chân trời');
-  await p.touchscreen.tap(stageBox.x + stageBox.w * 0.5, stageBox.y + stageBox.h * 0.45);
-  await sleep(150);
+  // 3) Chân trời (chỉ Biển, núi): có vạch, đổi lựa chọn "Cảnh dưới đẹp hơn" → mục tiêu lên 1/3 trên
+  await chip('#scenes .chip', 'Đồ vật'); // bỏ chọn chủ thể → chỉ còn chân trời
+  await chon('Biển, núi', 0.5, 0.45);
   const h1 = await p.evaluate(() => KN.st.assist.t.y);
   await chip('#asOpts .chip', 'Cảnh dưới');
   const h2 = await p.evaluate(() => KN.st.assist.t.y);
@@ -114,31 +141,48 @@ function makeVideo(file) {
   console.log('chan troi target y', h1.toFixed(0), '→', h2.toFixed(0));
   assert(h2 < h1, 'đổi "Cảnh dưới đẹp hơn" phải dời chân trời lên trên');
 
+  // 3a) Người + Biển, núi: hai nút, đúng chỗ mà chân trời cắt ngang đầu → nhắc hạ thấp máy
+  await chip('#scenes .chip', 'Người');
+  const tk = await p.evaluate(() => [...document.querySelectorAll('#asTok .chip')].map((c) => c.textContent));
+  await keo('Người', 0.5, 0.5); await coGoc('({ x: q.x + 0.15 * R.h, y: q.y + 0.196 * R.h })'); await keo('Biển', 0.5, 0.8); await xong();
+  await khop();
+  const ty = await p.evaluate(() => KN.st.assist.t.y);
+  await p.touchscreen.touchStart(stageBox.x + 30, stageBox.y + stageBox.h * 0.8); await p.touchscreen.touchMove(stageBox.x + 30, stageBox.y + ty + 15); await p.touchscreen.touchEnd(); await sleep(150);
+  const cat = await trang();
+  await p.screenshot({ path: OUT + '/a4a-chan-troi-cat-dau.png' });
+  console.log('nguoi+bien', JSON.stringify(tk), JSON.stringify(cat));
+  assert(tk.length === 2 && /cắt ngang đầu/.test(cat.msg), 'chân trời cắt ngang đầu mà không nhắc: ' + JSON.stringify(cat));
+  await p.click('#asClose');
+
   // 3b) Hướng nhìn/đi + Đường dẫn + cỡ Đồ vật — đích tính theo phần khung (u ngang, v dọc)
   const dich = () => p.evaluate(() => { const R = KN.crop(), t = KN.st.assist.t; return { u: (t.x - R.x) / R.w, v: (t.y - R.y) / R.h, dirRow: asDir.children.length, ratio: document.querySelector('#ratios .chip.on').textContent }; });
-  const tapAt = async (u, v) => { await p.touchscreen.tap(stageBox.x + stageBox.w * u, stageBox.y + stageBox.h * v); await sleep(150); };
-  // người nhìn sang trái → đặt lệch PHẢI dù chạm bên trái; bước 2 ẩn hàng chọn hướng
-  await chip('#scenes .chip', 'Người'); await chip('#asDir .chip', '← Nhìn');
-  await p.screenshot({ path: OUT + '/a4b-huong-buoc1.png' });
-  await tapAt(0.25, 0.5); const d1 = await dich();
-  // cảnh rộng đi sang phải → tâm xoắn nằm nửa TRÁI dù chạm bên phải
-  await chip('#scenes .chip', 'Cảnh rộng'); await chip('#asDir .chip', 'Nhìn/đi sang phải');
-  await tapAt(0.75, 0.5); const d2 = await dich();
-  // đường dẫn: chạm điểm cuối thấp → đích ở 1/3 trên
-  await chip('#scenes .chip', 'Đường dẫn'); await tapAt(0.4, 0.75); const d3 = await dich();
+  // người nhìn sang trái → đặt lệch PHẢI dù kéo vào bên trái; các bước sau ẩn hàng chọn hướng
+  await chon('Người', 0.25, 0.5, async () => { await chip('#asDir .chip', '← Nhìn'); await p.screenshot({ path: OUT + '/a4b-huong-buoc1.png' }); });
+  const d1 = await dich();
+  // điểm nhấn nhỏ đi sang phải → tâm xoắn nằm nửa TRÁI dù kéo vào bên phải
+  await chon('Điểm nhấn nhỏ', 0.75, 0.5, () => chip('#asDir .chip', 'Nhìn/đi sang phải')); const d2 = await dich();
+  // con đường: điểm cuối thấp → đích ở 1/3 trên
+  await chon('Con đường', 0.4, 0.75); const d3 = await dich();
   await p.screenshot({ path: OUT + '/a4c-duong-dan.png' });
   // đồ vật: Lấp đầy → đích ở tâm; Tối giản → đích ở giao điểm 1/3
-  await chip('#scenes .chip', 'Đồ vật'); await tapAt(0.3, 0.5);
+  await chon('Đồ vật', 0.3, 0.5);
   await chip('#asOpts .chip', 'Lấp đầy'); const d4 = await dich();
   await chip('#asOpts .chip', 'Tối giản'); const d5 = await dich(); d5.guide = await p.evaluate(() => KN.st.guide);
   await p.screenshot({ path: OUT + '/a4d-toi-gian.png' });
-  console.log('huong', JSON.stringify(d1), JSON.stringify(d2), '| duong dan', JSON.stringify(d3), '| do vat', JSON.stringify(d4), JSON.stringify(d5));
-  assert(Math.abs(d1.u - 2 / 3) < 0.02 && d1.dirRow === 0, 'Người nhìn sang trái phải đặt ở 2/3 bên phải, bước 2 không còn hàng chọn hướng');
-  assert(d2.u < 0.5, 'Cảnh rộng đi sang phải phải đặt tâm xoắn bên trái');
-  assert(d3.ratio === '2:3' && Math.abs(d3.v - 1 / 3) < 0.02, 'Đường dẫn: điểm cuối phải về 1/3 trên, khung 2:3');
+  // hoa: kéo ô to hơn ô đích → "Lùi ra xa"
+  await chip('#scenes .chip', 'Hoa, cây'); await keo('Hoa', 0.5, 0.5);
+  await coGoc('({ x: q.x + 0.4 * Math.min(R.w, R.h), y: q.y + 0.4 * Math.min(R.w, R.h) })'); await xong();
+  const lui = await trang();
+  await p.screenshot({ path: OUT + '/a4e-lui-ra.png' });
+  console.log('huong', JSON.stringify(d1), JSON.stringify(d2), '| duong dan', JSON.stringify(d3), '| do vat', JSON.stringify(d4), JSON.stringify(d5), '| lui', lui.msg);
+  assert(Math.abs(d1.u - 2 / 3) < 0.02 && d1.dirRow === 0, 'Người nhìn sang trái phải đặt ở 2/3 bên phải, bước sau không còn hàng chọn hướng');
+  assert(d2.u < 0.5, 'Điểm nhấn đi sang phải phải đặt tâm xoắn bên trái');
+  assert(d3.ratio === '2:3' && Math.abs(d3.v - 1 / 3) < 0.02, 'Con đường: điểm cuối phải về 1/3 trên, khung 2:3');
   assert(Math.abs(d4.u - 0.5) < 0.02 && Math.abs(d4.v - 0.5) < 0.02, 'Lấp đầy phải đặt vật ở tâm');
   const g3 = (x) => Math.abs(x - 1 / 3) < 0.02 || Math.abs(x - 2 / 3) < 0.02;
   assert(g3(d5.u) && g3(d5.v) && d5.guide === 'thirds', 'Tối giản phải đặt vật ở một giao điểm 1/3 và vẽ lưới một phần ba');
+  assert(lui.phase === 'dist' && /Lùi ra xa/.test(lui.msg), 'ô to hơn đích phải bảo lùi ra: ' + lui.msg);
+
   // 3c) Kẹt phóng to: chạm đúp không phóng to trang; lỡ phóng to thì khung ngắm phải thả cho chụm thu nhỏ + nhắc
   const tz = () => p.evaluate(() => ({ stage: stage.style.touchAction, chip: getComputedStyle(document.querySelector('.chip')).touchAction, scale: visualViewport.scale, toast: document.getElementById('toast').textContent }));
   const z0 = await tz();

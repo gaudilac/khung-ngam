@@ -30,7 +30,7 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → (tuỳ chọn) c
 
 ### 4. Chạy thật mới tin
 **Định nghĩa tiêu chí thành công trước. Lặp đến khi xác minh được.**
-- `node tests/grade.test.js` — kiểm bộ màu không cần trình duyệt (preset Gốc giữ nguyên pixel, preset khác phải đổi, đen trắng phải ra xám, gợi ý có lý do, nhận diện màu bổ túc).
+- `node tests/grade.test.js` — kiểm bộ màu không cần trình duyệt (preset Gốc giữ nguyên pixel, preset khác phải đổi, đen trắng phải ra xám, gợi ý có lý do, nhận diện màu bổ túc, gợi ý theo chủ thể đã chọn, ngược sáng theo ô chủ thể, đèn vàng ban đêm vs nắng chiều, ám xanh lá không bắt nhầm cây cỏ).
 - `NODE_PATH="../web_task/node_modules" node tests/assist.js` (cần server 8765) — camera giả là **video tự dựng hoa văn trôi sang phải** với tốc độ biết trước: kiểm chấm bám chủ thể trôi đúng hướng/đúng khoảng cách, câu chỉ hướng lia máy đúng chiều, lựa chọn chân trời, nút ✕, toàn màn hình phủ kín, nút Lưu vào Ảnh hiện ngay và luồng Safari chặn → bấm lại.
 - `NODE_PATH="../web_task/node_modules" node tests/xoay-luu.js` (chạy sau assist.js vì dùng chung video thử) — chụp 2 tấm liền, ảnh lưu phải khác nhau; xoay ngang/dọc bằng đổi khổ (cùng `isMobile` nên không tải lại trang): khung đổi chiều, nút chụp trong màn, màn chỉnh màu ngang đủ lớn.
 - `NODE_PATH="../web_task/node_modules" node tests/e2e.js` (cần server 8765 đang chạy) — puppeteer + camera giả của Chrome: mở camera, đổi khung, thước cân bằng giả lập cả dấu Android lẫn iOS, chụp, chỉnh màu, tải ảnh, tải ảnh có sẵn, giữ-để-so. Ảnh chụp màn hình ra `$OUT` (mặc định `$TMPDIR/khung-ngam-test`) — **xem ảnh**, đừng chỉ đọc chữ PASS.
@@ -52,7 +52,7 @@ Web app hỗ trợ chụp ảnh nghệ thuật: mở camera → (tuỳ chọn) c
 ## Cấu trúc file
 - `index.html` — toàn bộ CSS (trong `<style>`) + markup của hai màn: `#cam` (chụp) và `#edit` (chỉnh màu). Màn đang hiện có class `.on`.
 - `app.js` — một IIFE, theo thứ tự: danh sách khung `GUIDES` + tỉ lệ `RATIOS` → vẽ khung (`cropRect`, `drawGuide`, `SPIRAL`) → camera (`startCamera`, `setupPro` zoom/bù sáng) → đo sáng (`meter`, `lumaStats`, `drawHist`) → thước cân bằng (`onMotion`, `levelLoop`) → chụp (`sourceRect`, `capture`) → màn chỉnh màu (`openEditor`, `buildPresets`, `render`, bảng màu) → xuất ảnh (`exportBlob`, dải bảng màu tuỳ chọn).
-- `grade.js` — `window.Grade`, **không đụng DOM** (chạy được trong Node): `PRESETS`, `analyze` (thống kê ảnh), `suggest` (chấm điểm preset), `resolve` (gộp preset + chỉnh tay), `apply` (xử lý pixel), `palette` (k-means hạt giống cố định), `harmony` (đọc quan hệ màu).
+- `grade.js` — `window.Grade`, **không đụng DOM** (chạy được trong Node): `PRESETS`, `analyze(img, box)` (thống kê ảnh + vùng chủ thể, dải trời trên cùng, màu nguồn sáng), `light` (nhãn ánh sáng), `suggest(a, ctx)` (chấm điểm preset), `resolve` (gộp preset + chỉnh tay), `apply` (xử lý pixel), `palette` (k-means hạt giống cố định), `harmony` (đọc quan hệ màu).
 - `tests/` — `grade.test.js`, `e2e.js`, `assist.js`, `xoay-luu.js`.
 - `window.KN = { st, crop }` — móc trạng thái cho test đọc, đừng xoá.
 
@@ -70,8 +70,15 @@ Nút "?" đầu hàng khung mở bảng `#gsheet` (`openGuideSheet`): hình vẽ
 ### Thêm khung bố cục mới
 Thêm một mục vào `GUIDES` (`id`, `name`, `variants`, `when`, `tip`) + một nhánh trong `drawGuide` (+ một luật trong `suggestGuide` nếu nhận ra được bằng đường nét). `tip` viết như lời thợ ảnh: đặt chủ thể ở đâu, hợp cảnh gì. Có biến thể xoay/lật thì `variants > 1` — chạm lại chip để đổi.
 
+### Gợi ý gam màu theo bối cảnh lúc chụp
+`capture()` gọi `shotCtx()` ghi lại `{ main, opt, hz, selfie, hour, box }` — thứ đã chọn ở "Trong khung có:" + ô chủ thể đổi sang tỉ lệ 0..1 của ảnh lưu ra (camera trước thì lật x vì ảnh lưu không lật gương; còn ở bước place thì không lấy ô). Ảnh chọn từ thư viện không có bối cảnh → chỉ chấm theo thống kê. `analyze(img, box)` đo độ sáng trong/ngoài ô (ngược sáng), dải 1/4 trên (trời trắng/xanh), màu vùng trung tính (đèn vàng, bóng râm, huỳnh quang). `light(a, ctx)` ra nhãn hiện ở dòng "Ánh sáng:" trên câu gợi ý. `suggest` cộng/trừ điểm bằng `add(id, điểm, lý do)`; câu `why` hiện ra là yếu tố cộng nhiều nhất (≥ 0,15), không có thì dùng câu thống kê chung.
+- **Bộ dò da bắt nhầm mọi mặt màu cam** (gỗ, món ăn, dải trời hoàng hôn, cả bức tường dưới đèn vàng — từng ra 100% "da"): tín hiệu da bị chặn 0,35, nhân 0,3 khi người dùng chọn chủ thể không phải người, chặn 0,1 khi ảnh ám màu mạnh. Ảnh thư viện không bối cảnh vẫn có thể dính (hoàng hôn trong `e2e.js` có Portra trong top 3).
+- Giờ chụp chỉ dùng để tách **đèn vàng ban đêm** (→ Tự cân) khỏi **nắng chiều** (→ Giờ vàng): hai thứ cùng ấm nhưng xử lý ngược nhau.
+- Ám xanh lá chỉ đo ở vùng gần xám (`s < 0.15`) và bỏ qua khi khung nhiều lá cây — đo rộng thì đất xanh rêu bị tính là ám.
+- `window.KN.shot()` trả bối cảnh của tấm đang chỉnh — `assist.js` kiểm nó khớp chỗ đã đặt mặt. Video thử là ảnh XÁM nên đừng kiểm thứ hạng gam trong trình duyệt; thứ hạng kiểm ở `grade.test.js`.
+
 ### Thêm preset màu mới
-Thêm vào `PRESETS` (`id`, `name`, `note`, `p`) + một dòng chấm điểm trong `suggest` kèm `why`. Tham số `p` có sẵn: `ev, temp, tint, contrast, fade, lift, gain, gamma, hiRoll, sat, vib, splitS, splitH, to, greenDesat, bw, vig, grain`. Cập nhật số preset trong `tests/e2e.js` (đang kiểm 14).
+Thêm vào `PRESETS` (`id`, `name`, `note`, `p`) + một dòng chấm điểm trong `suggest` kèm `why`, rồi xét nó hợp/kỵ chủ thể và ánh sáng nào (các dòng `add(...)`). Tham số `p` có sẵn: `ev, temp, tint, contrast, fade, lift, gain, gamma, hiRoll, sat, vib, splitS, splitH, to, greenDesat, bw, vig, grain`. Cập nhật số preset trong `tests/e2e.js` (đang kiểm 14).
 
 ## Bẫy đã biết
 - **Lưu vào Ảnh từng trả ẢNH CŨ** (user báo): ảnh xuất sẵn `ready` được nhận bằng `shareSig`, mà chữ ký chỉ có gam màu/độ đậm/chỉnh tay/bề rộng → tấm mới cùng gam + cùng cỡ bị coi là tấm cũ. Giờ chữ ký có `ed.shot` (tăng mỗi lần `openEditor`) và `openEditor` xoá `ready`. Thêm bộ nhớ đệm nào cho ảnh thì khoá theo `ed.shot`.

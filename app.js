@@ -99,7 +99,7 @@
     facing: 'environment', stream: null, track: null, timer: 0, busy: false,
     level: false, roll: null, pitch: null, full: false, assist: null,
   };
-  window.KN = { st, crop: () => cropRect(), suggestGuide }; // móc cho tests/
+  window.KN = { st, crop: () => cropRect(), suggestGuide, shot: () => ed.ctx }; // móc cho tests/
 
   const stage = $('stage'), video = $('video'), ov = $('overlay'), octx = ov.getContext('2d');
 
@@ -900,14 +900,30 @@
     const sy = (R.y - offY) / sc;
     return { sx: Math.max(0, sx), sy: Math.max(0, sy), sw: Math.min(vw, R.w / sc), sh: Math.min(vh, R.h / sc) };
   }
+  // bối cảnh lúc chụp cho gợi ý gam màu: thứ người dùng đã chọn + vùng chủ thể theo tỉ lệ của ảnh lưu ra
+  function shotCtx() {
+    const a = st.assist, mirror = video.classList.contains('mirror');
+    const c = { hour: new Date().getHours(), selfie: mirror, box: null };
+    if (!a) return c;
+    Object.assign(c, { main: a.main && a.main.id, hz: !!a.hz, opt: a.opt && a.opt[0] });
+    if (a.main && a.pts.length && a.phase !== 'place') {
+      const R = cropRect(), p = subjectPoint(a);
+      // điểm (đường, điểm nhấn) không có ô → lấy một vùng nhỏ quanh điểm
+      const w = (a.box ? a.box.w : 0.2 * R.w) / R.w, h = (a.box ? a.box.h : 0.2 * R.h) / R.h;
+      let x = (p.x - R.x) / R.w; if (mirror) x = 1 - x; // ảnh lưu ra không lật gương
+      c.box = { x: x - w / 2, y: (p.y - R.y) / R.h - h / 2, w, h };
+    }
+    return c;
+  }
   function capture() {
     const r = sourceRect(); if (!r) return;
+    const ctx = shotCtx();
     const c = document.createElement('canvas');
     c.width = Math.round(r.sw); c.height = Math.round(r.sh);
     c.getContext('2d').drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, c.width, c.height);
     const f = $('flash'); f.style.transition = 'none'; f.style.opacity = 0.9;
     requestAnimationFrame(() => { f.style.transition = 'opacity .35s'; f.style.opacity = 0; });
-    openEditor(c);
+    openEditor(c, ctx);
   }
   $('shutter').onclick = async () => {
     if (st.busy) return; st.busy = true;
@@ -973,14 +989,16 @@
   }
   buildAdjUI();
 
-  function openEditor(canvas) {
+  function openEditor(canvas, ctx) {
     ed.full = canvas; ed.shot = (ed.shot || 0) + 1; ready = null; // ảnh mới: bỏ ảnh đã xuất sẵn của tấm trước
     const longSide = Math.min(1600, Math.round(Math.max(innerWidth, innerHeight) * Math.min(2, devicePixelRatio || 1)));
     ed.src = scaled(canvas, longSide);
     ed.out = new ImageData(ed.src.width, ed.src.height);
     pv.width = ed.src.width; pv.height = ed.src.height;
-    ed.analysis = G.analyze(scaled(canvas, 96));
-    ed.sugg = G.suggest(ed.analysis).slice(0, 3);
+    ed.ctx = ctx || null;
+    ed.analysis = G.analyze(scaled(canvas, 96), ctx && ctx.box);
+    ed.sugg = G.suggest(ed.analysis, ctx).slice(0, 3);
+    ed.light = G.light(ed.analysis, ctx).text;
     ed.preset = ed.sugg[0].id; ed.amount = 1; $('amount').value = 100; $('amountOut').textContent = 100;
     resetAdj(); buildAdjUI();
     buildPresets();
@@ -1026,7 +1044,7 @@
     if (canShareFiles && (!ready || ready.sig !== shareSig())) $('share').textContent = SHARE_TXT;
     pctx.putImageData(ed.comparing ? ed.src : ed.out, 0, 0);
     const p = presetById(ed.preset), sg = ed.sugg.find((s) => s.id === ed.preset);
-    $('note').innerHTML = (sg ? `<b>Gợi ý:</b> ${sg.why}. ` : '') + (p.note || '');
+    $('note').innerHTML = (ed.light ? `<span class="lt">Ánh sáng: ${ed.light}</span>` : '') + (sg ? `<b>Gợi ý:</b> ${sg.why}. ` : '') + (p.note || '');
     histDebounced(); paletteDebounced();
   }
   const debounce = (fn, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; };

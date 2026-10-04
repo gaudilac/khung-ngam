@@ -998,9 +998,9 @@
     ed.ctx = ctx || null;
     ed.analysis = G.analyze(scaled(canvas, 96), ctx && ctx.box);
     ed.sugg = G.suggest(ed.analysis, ctx).slice(0, 3);
-    ed.light = G.light(ed.analysis, ctx).text;
+    const lt = G.light(ed.analysis, ctx); ed.light = lt.text;
     ed.preset = ed.sugg[0].id; ed.amount = 1; $('amount').value = 100; $('amountOut').textContent = 100;
-    resetAdj(); buildAdjUI();
+    resetAdj(); ed.adj.ev = ed.autoEv = lt.lift; buildAdjUI(); // ngược sáng: tự kéo phơi sáng cho chủ thể khỏi tối
     buildPresets();
     $('cam').classList.remove('on'); $('edit').classList.add('on');
     render();
@@ -1044,7 +1044,8 @@
     if (canShareFiles && (!ready || ready.sig !== shareSig())) $('share').textContent = SHARE_TXT;
     pctx.putImageData(ed.comparing ? ed.src : ed.out, 0, 0);
     const p = presetById(ed.preset), sg = ed.sugg.find((s) => s.id === ed.preset);
-    $('note').innerHTML = (ed.light ? `<span class="lt">Ánh sáng: ${ed.light}</span>` : '') + (sg ? `<b>Gợi ý:</b> ${sg.why}. ` : '') + (p.note || '');
+    const lifted = ed.autoEv && ed.adj.ev === ed.autoEv ? ` — đã tự kéo Phơi sáng +${Math.round(ed.autoEv * 100)} cho chủ thể khỏi tối` : '';
+    $('note').innerHTML = (ed.light ? `<span class="lt">Ánh sáng: ${ed.light}${lifted}</span>` : '') + (sg ? `<b>Gợi ý:</b> ${sg.why}. ` : '') + (p.note || '');
     histDebounced(); paletteDebounced();
   }
   const debounce = (fn, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; };

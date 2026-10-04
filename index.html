@@ -22,7 +22,9 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
     font: 14px/1.4 "Be Vietnam Pro", system-ui, -apple-system, sans-serif; }
   button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
-  .screen { position: fixed; inset: 0; display: none; height: 100dvh; }
+  /* absolute chứ KHÔNG fixed: iOS 26 (cả Chrome trên iPhone) làm lệch vùng nhận chạm của phần tử fixed sau khi xoay máy —
+     nút vẫn vẽ đúng chỗ mà bấm không ăn, tải lại trang mới hết (WebKit bug 297779) */
+  .screen { position: absolute; inset: 0; display: none; height: 100dvh; }
   .screen.on { display: grid; grid-template-columns: minmax(0, 1fr); }
 
   /* ---------- Màn chụp ---------- */
@@ -37,7 +39,7 @@
   .chip.on .sug { color: #111; }
   .chip.help { width: 34px; padding-left: 0; padding-right: 0; text-align: center; font-weight: 600; }
   /* bảng so sánh khung bố cục */
-  .sheet { position: fixed; inset: 0; z-index: 8; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; justify-content: center; }
+  .sheet { position: absolute; inset: 0; z-index: 8; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; justify-content: center; }
   .sheet[hidden] { display: none; }
   .sheet .card { width: min(520px, 100%); max-height: 85%; overflow-y: auto; background: var(--panel); border-radius: 16px 16px 0 0;
     padding: 14px 14px calc(var(--safe-b) + 14px); }

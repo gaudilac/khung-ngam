@@ -7,17 +7,17 @@
 
   // ---------- Khung bố cục ----------
   const GUIDES = [
-    { id: 'thirds', name: 'Một phần ba', variants: 1,
+    { id: 'thirds', name: 'Một phần ba', variants: 1, when: 'Dùng được cho hầu hết ảnh: người, phong cảnh có chân trời. Không biết chọn gì thì chọn cái này.',
       tip: 'Đặt chủ thể vào một trong 4 giao điểm. Đường chân trời trùng đường ngang trên nếu mặt đất đẹp, đường dưới nếu bầu trời đẹp. Chân dung: mắt nằm trên đường ngang trên, chừa khoảng trống về phía người đang nhìn.' },
-    { id: 'phi', name: 'Lưới vàng', variants: 1,
+    { id: 'phi', name: 'Lưới vàng', variants: 1, when: 'Chân dung cận, món ăn, đồ vật trên nền gọn — chủ thể gần giữa hơn, ảnh chặt và tĩnh.',
       tip: 'Chia 1 : 0,618 : 1 — giao điểm gần tâm hơn một phần ba, bố cục chặt và tĩnh hơn. Hợp kiến trúc, chân dung cận, tĩnh vật.' },
-    { id: 'spiral', name: 'Xoắn ốc vàng', variants: 4,
+    { id: 'spiral', name: 'Xoắn ốc vàng', variants: 4, when: 'Cảnh rộng có MỘT điểm nhấn nhỏ (người, con thuyền, cái cây) và đường cong dẫn mắt về đó.',
       tip: 'Tâm xoắn (vòng tròn nhỏ) là điểm nhấn: mắt, bông hoa, người nhỏ giữa cảnh. Cho đường cong tự nhiên — bờ biển, cầu thang, dáng người — chạy theo nhịp xoắn. Chạm lại nút để xoay hướng.' },
-    { id: 'diag', name: 'Đường chéo', variants: 1,
+    { id: 'diag', name: 'Đường chéo', variants: 1, when: 'Có đường xiên rõ: con đường, bờ biển, cầu thang, vệt nắng — ảnh có chuyển động.',
       tip: 'Đặt đường dẫn (con đường, hàng rào, vệt nắng) theo đường chéo để ảnh có chuyển động. Chỗ các đường cắt nhau vuông góc là nơi đặt chủ thể.' },
-    { id: 'tri', name: 'Tam giác vàng', variants: 2,
+    { id: 'tri', name: 'Tam giác vàng', variants: 2, when: 'Có đường xiên mạnh VÀ một chủ thể nằm cạnh nó — kịch tính hơn Đường chéo.',
       tip: 'Đường chéo chính chia khung, hai đường vuông góc tạo ba tam giác. Đặt chủ thể tại chân đường vuông góc; hợp ảnh có đường xiên mạnh. Chạm lại để lật.' },
-    { id: 'center', name: 'Đối xứng', variants: 1,
+    { id: 'center', name: 'Đối xứng', variants: 1, when: 'Cảnh cân hai bên: kiến trúc, cổng, mặt nước phản chiếu, chân dung nhìn thẳng.',
       tip: 'Dùng cho kiến trúc, mặt nước phản chiếu, chân dung chính diện. Phải cân thật thẳng — lệch 1–2° là lộ ngay, hãy bật thước cân bằng.' },
     { id: 'none', name: 'Không khung', variants: 1, tip: '' },
   ];
@@ -99,7 +99,7 @@
     facing: 'environment', stream: null, track: null, timer: 0, busy: false,
     level: false, roll: null, pitch: null, full: false, assist: null,
   };
-  window.KN = { st, crop: () => cropRect() }; // móc cho tests/
+  window.KN = { st, crop: () => cropRect(), suggestGuide }; // móc cho tests/
 
   const stage = $('stage'), video = $('video'), ov = $('overlay'), octx = ov.getContext('2d');
 
@@ -122,10 +122,15 @@
   // ---------- Thanh chọn khung & tỉ lệ ----------
   function renderGuideChips() {
     $('guides').innerHTML = '';
+    const help = document.createElement('button');
+    help.className = 'chip help'; help.textContent = '?'; help.setAttribute('aria-label', 'Nên chọn khung nào?');
+    help.onclick = openGuideSheet;
+    $('guides').appendChild(help);
     GUIDES.forEach((g) => {
       const b = document.createElement('button');
       b.className = 'chip' + (st.guide === g.id ? ' on' : '');
-      b.innerHTML = g.name + (g.variants > 1 && st.guide === g.id ? '<span class="cyc">↻</span>' : '');
+      // ★ đặt SAU tên: test và người dùng đều tìm chip theo chữ đầu
+      b.innerHTML = g.name + (st.sug && st.sug.id === g.id ? '<span class="sug">★</span>' : '') + (g.variants > 1 && st.guide === g.id ? '<span class="cyc">↻</span>' : '');
       b.onclick = () => {
         if (st.guide === g.id && g.variants > 1) st.variant = (st.variant + 1) % g.variants;
         else { st.guide = g.id; st.variant = 0; }
@@ -134,6 +139,28 @@
       $('guides').appendChild(b);
     });
   }
+  // Bảng so sánh khung: hình vẽ nhỏ + "dùng khi nào", chạm để chọn
+  function openGuideSheet() {
+    const list = $('gsList'), dpr = devicePixelRatio || 1; list.innerHTML = '';
+    const sg = st.sug && GUIDES.find((g) => g.id === st.sug.id);
+    $('gsSug').textContent = sg ? `★ Gợi ý cho cảnh đang ngắm: ${sg.name} — ${st.sug.why}` : 'Hướng máy vào cảnh để app gợi ý khung.';
+    GUIDES.filter((g) => g.when).forEach((g) => {
+      const b = document.createElement('button');
+      b.className = 'grow' + (st.guide === g.id ? ' on' : '');
+      const c = document.createElement('canvas'); c.width = 60 * dpr; c.height = 76 * dpr;
+      const cx = c.getContext('2d'); cx.scale(dpr, dpr); cx.fillStyle = '#3a3a3a'; cx.fillRect(0, 0, 60, 76);
+      drawGuide(cx, { x: 0, y: 0, w: 60, h: 76 }, g.id, 0);
+      const t = document.createElement('div');
+      t.innerHTML = `<b>${g.name}${sg === g ? ' <span class="sug">★ gợi ý</span>' : ''}</b><small>${g.when}</small>`;
+      b.append(c, t);
+      b.onclick = () => { st.guide = g.id; st.variant = 0; $('gsheet').hidden = true; renderGuideChips(); showTip(); draw(); };
+      list.appendChild(b);
+    });
+    $('gsheet').hidden = false;
+  }
+  $('gsClose').onclick = () => ($('gsheet').hidden = true);
+  $('gsheet').onclick = (e) => { if (e.target === $('gsheet')) $('gsheet').hidden = true; };
+
   function ratioLabel(r) {
     if (!r) return 'Toàn khung';
     const [a, b] = st.landscape ? [r[1], r[0]] : r;
@@ -296,8 +323,8 @@
     octx.fillStyle = 'rgba(0,0,0,.62)';
     octx.beginPath(); octx.rect(0, 0, W, H); octx.rect(R.x, R.y, R.w, R.h); octx.fill('evenodd');
     octx.strokeStyle = 'rgba(255,255,255,.5)'; octx.lineWidth = 1; octx.strokeRect(R.x + 0.5, R.y + 0.5, R.w - 1, R.h - 1);
-    drawGuide(octx, R, st.guide, st.variant);
-    drawAssist(octx, R);
+    // đang xoay/đổi cỡ thì khung có lúc âm cỡ → vòng tròn của Đối xứng ném lỗi bán kính âm, bỏ qua lượt vẽ này
+    if (R.w > 0 && R.h > 0) { drawGuide(octx, R, st.guide, st.variant); drawAssist(octx, R); }
     const [top, bot] = insets(), cam = $('cam');
     cam.style.setProperty('--insT', top + 'px'); cam.style.setProperty('--insB', bot + 'px');
     const lv = $('level');
@@ -816,6 +843,48 @@
     a.lost = tracked.length > 0 && tracked.every((p) => p.lost);
     updateAssist(); draw();
   }, 90);
+
+  // Gợi ý khung theo ĐƯỜNG NÉT của cảnh (ảnh xám nhỏ g, rộng w, cao h) — không hiểu nội dung, nên chỉ là gợi ý.
+  // Trả { id, why } hoặc null khi cảnh quá trơn.
+  function suggestGuide(g, w, h) {
+    let mean = 0; for (let i = 0; i < g.length; i++) mean += g[i]; mean /= g.length;
+    let dev = 0, sym = 0, eAll = 0, eH = 0, eD1 = 0, eD2 = 0;
+    const rows = new Float32Array(h), rowN = new Uint16Array(h), cells = new Float32Array(64); // năng lượng / số điểm cạnh ngang theo hàng, năng lượng theo lưới 8×8
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x, gx = g[i + 1] - g[i - 1], gy = g[i + w] - g[i - w], ax = Math.abs(gx), ay = Math.abs(gy), m = ax + ay;
+      dev += Math.abs(g[i] - mean); sym += Math.abs(g[i] - g[y * w + (w - 1 - x)]);
+      if (m < 24) continue;
+      eAll += m; cells[Math.min(7, (y * 8 / h) | 0) * 8 + Math.min(7, (x * 8 / w) | 0)] += m;
+      if (ay > 2.5 * ax) { eH += m; rows[y] += m; rowN[y]++; } // cạnh nằm ngang: sáng tối đổi theo chiều dọc
+      else if (ax <= 2.5 * ay) { if (gx * gy > 0) eD1 += m; else eD2 += m; } // cạnh xiên, tách hai hướng
+    }
+    const n = (w - 2) * (h - 2);
+    // trơn = ít đường nét (không dùng độ lệch sáng: một điểm nhấn nhỏ trên nền trơn lệch rất ít mà vẫn là cảnh có chủ thể)
+    if (eAll < n * 0.3) return null;
+    // chân trời xét TRƯỚC đối xứng: trời + biển trơn thì hai bên trái phải cũng giống nhau
+    // đường ngang phải trải gần hết bề rộng — mép trên/dưới của một vật nhỏ không phải chân trời
+    let peak = 0, peakN = 0;
+    for (let y = 1; y < h - 1; y++) { peak = Math.max(peak, rows[y - 1] + rows[y] + rows[y + 1]); peakN = Math.max(peakN, rowN[y - 1] + rowN[y] + rowN[y + 1]); }
+    if (eH > 0.35 * eAll && peak > 0.15 * eAll && peakN > 0.6 * w) return { id: 'thirds', why: 'có đường ngang rõ (chân trời) — đặt nó trên một đường 1/3' };
+    if (sym / dev < 0.5) return { id: 'center', why: 'cảnh đang cân hai bên' };
+    const sorted = Array.from(cells).sort((a, b) => b - a), top = (k) => sorted.slice(0, k).reduce((s, v) => s + v, 0) / eAll;
+    if (top(4) > 0.6) return { id: 'spiral', why: 'nền trơn với một điểm nhấn nhỏ' };
+    let mid = 0; for (let r = 2; r < 6; r++) for (let c = 2; c < 6; c++) mid += cells[r * 8 + c];
+    if (mid / eAll > 0.7) return { id: 'phi', why: 'chủ thể ở giữa, nền xung quanh gọn' };
+    const eD = Math.max(eD1, eD2);
+    if (eD > 0.45 * eAll && eD > 2 * Math.min(eD1, eD2)) return { id: 'diag', why: 'có đường xiên rõ' };
+    return { id: 'thirds', why: 'không thấy đường nét nổi bật — Một phần ba dùng được cho hầu hết cảnh' };
+  }
+  // xem cảnh mỗi 0,6 giây; phải ra cùng kết quả 3 lần liền mới đổi ★ để khỏi nhảy lung tung khi lia máy.
+  // Đang ở "Trong khung có:" thì app đã tự chọn khung, không gợi ý nữa.
+  const sugRun = { id: null, n: 0 };
+  setInterval(() => {
+    if (st.assist || !$('cam').classList.contains('on') || !video.videoWidth || document.hidden) return;
+    const f = grab(); if (!f) return;
+    const r = suggestGuide(f.g, f.w, f.h), id = r ? r.id : null;
+    sugRun.n = sugRun.id === id ? sugRun.n + 1 : 1; sugRun.id = id;
+    if (sugRun.n >= 3 && (st.sug ? st.sug.id : null) !== id) { st.sug = r; renderGuideChips(); }
+  }, 600);
 
   // ---------- Chụp ----------
   // Vùng ảnh gốc (theo pixel của video) tương ứng với khung đang hiện trên màn

@@ -203,6 +203,8 @@
   // Xoay máy: khung đổi chiều theo; đang ở bước căn khung thì toạ độ cũ hết đúng → làm lại từ bước chỉ chủ thể
   let lastLand = isLand();
   function onResize() {
+    // trang không cuộn được (overflow hidden) nhưng iOS có lúc vẫn tự dịch trang khi xoay → kéo về gốc
+    if (scrollX || scrollY) scrollTo(0, 0);
     const land = isLand();
     if (land !== lastLand) {
       lastLand = land; st.landscape = land; renderRatioChips();

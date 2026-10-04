@@ -74,6 +74,12 @@
   .assist .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: #bbb; }
   .assist .h b { color: var(--accent); font-size: 13px; }
   .assist .h button { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.12); }
+  /* thanh tiêu đề là tay kéo: dời bảng khỏi chủ thể */
+  .assist .h { touch-action: none; cursor: grab; }
+  .assist .h .btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .assist::before { content: ''; display: block; width: 34px; height: 4px; margin: -4px auto 6px; border-radius: 2px; background: rgba(255,255,255,.28); }
+  /* thu gọn: chỉ còn câu chỉ hướng (+ nút kéo vào khung và nút Xong ở bước đặt vật — thiếu thì không đi tiếp được) */
+  .assist.mini #asOpts, .assist.mini #asDir, .assist.mini .tipx { display: none; }
   .assist .msg { font-weight: 500; }
   .assist.ok .msg { color: var(--ok); }
   .assist .opts { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
@@ -84,6 +90,7 @@
   /* bước đặt vật: bảng xuống đáy khung; đang kéo thì mờ đi để thấy cả khung */
   .assist.dock { top: auto; bottom: calc(var(--insB, 0px) + 10px); z-index: 1; } /* nổi trên đồng hồ đo sáng */
   .assist.ghost { opacity: .12; pointer-events: none; }
+  .assist.moved { right: auto !important; bottom: auto !important; } /* đã kéo tay: vị trí do JS đặt, không tự né nữa */
   .assist .tok { touch-action: none; border-style: dashed; }
   .assist .tok.on { border-style: solid; }
   .assist .go { display: block; width: 100%; margin-top: 8px; padding: 9px; border-radius: 10px; background: var(--accent); color: #111; font-weight: 600; }
@@ -243,7 +250,7 @@
     <div id="level"><div class="ref"></div><div class="bar"></div><span class="deg"></span></div>
     <div class="tip" id="tip"></div>
     <div class="assist" id="assist" hidden>
-      <div class="h"><span><b id="asTitle"></b> <span id="asStep"></span></span><button id="asClose" aria-label="Thoát hướng dẫn">✕</button></div>
+      <div class="h"><span><b id="asTitle"></b> <span id="asStep"></span></span><span class="btns"><button id="asMin" aria-label="Thu gọn hướng dẫn">–</button><button id="asClose" aria-label="Thoát hướng dẫn">✕</button></span></div>
       <div class="msg" id="asMsg"></div>
       <div class="opts" id="asOpts"></div>
       <div class="opts" id="asDir"></div>
